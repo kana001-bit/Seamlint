@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="200mm" viewBox="0 0 200 200">
+  <!-- Two connectors that share an endpoint at (100,60) but meet at a corner:
+       front-yoke arrives heading down-right, front-panel leaves heading steeply down. -->
+  <path
+    id="front-yoke"
+    fill="none"
+    stroke="black"
+    d="M 20 40 C 40 40 80 50 100 60"
+  />
+  <path
+    id="front-panel"
+    fill="none"
+    stroke="blue"
+    d="M 100 60 C 105 90 140 120 160 140"
+  />
+</svg>

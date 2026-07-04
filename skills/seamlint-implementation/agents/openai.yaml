@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seamlint Implementation"
+  short_description: "Seamlint の実装・診断・CLI の規約"
+  default_prompt: "$seamlint-implementation を使って、Seamlint の geometry rules、diagnostics、CLI behavior、tests、docs、または Loomit integration を変更する。"

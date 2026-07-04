@@ -1,0 +1,92 @@
+import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.js";
+
+export function checkCurveSmoothness(points, options = {}) {
+  const diagnostics = [];
+  const angleThresholdDeg = options.angleThresholdDeg ?? 25;
+  const closedEndpointThresholdMm = options.closedEndpointThresholdMm ?? 0.5;
+  const target = options.target ?? "path";
+
+  if (points.length < 3) {
+    diagnostics.push({
+      severity: "error",
+      code: "geometry.too_few_points",
+      target,
+      message: "The path has too few sampled points to check smoothness.",
+      expected: { minPoints: 3 },
+      actual: { points: points.length }
+    });
+    return diagnostics;
+  }
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    if (isSubpathBreak(points[index - 1], points[index], points[index + 1])) {
+      continue;
+    }
+    const incoming = subtract(points[index], points[index - 1]);
+    const outgoing = subtract(points[index + 1], points[index]);
+    const angle = angleBetweenDegrees(incoming, outgoing);
+
+    if (angle > angleThresholdDeg) {
+      diagnostics.push({
+        severity: "warning",
+        code: "geometry.curve_kink",
+        target,
+        message: `Path direction changes sharply near sampled point ${index}.`,
+        expected: { maxAngleDeg: angleThresholdDeg },
+        actual: {
+          angleDeg: round(angle),
+          point: roundPoint(points[index])
+        },
+        suggestion: ["Check whether this is an intentional corner or an unwanted kink."]
+      });
+    }
+  }
+
+  if (options.expectClosed) {
+    const closingAngle = angleBetweenDegrees(
+      subtract(points[0], points.at(-2)),
+      subtract(points[1], points[0])
+    );
+    if (!points[0].moveTo && !points.at(-1).moveTo && closingAngle > angleThresholdDeg) {
+      diagnostics.push({
+        severity: "warning",
+        code: "geometry.curve_kink",
+        target,
+        message: "Closed path direction changes sharply at the start/end point.",
+        expected: { maxAngleDeg: angleThresholdDeg },
+        actual: {
+          angleDeg: round(closingAngle),
+          point: roundPoint(points[0])
+        },
+        suggestion: ["Check whether the closing corner is intentional or should be smoothed."]
+      });
+    }
+
+    const endpointGap = distance(points[0], points.at(-1));
+    if (endpointGap > closedEndpointThresholdMm) {
+      diagnostics.push({
+        severity: "error",
+        code: "geometry.open_loop",
+        target,
+        message: "The path is expected to be a closed loop, but its endpoints do not meet.",
+        expected: { maxEndpointGapMm: closedEndpointThresholdMm },
+        actual: { endpointGapMm: round(endpointGap) },
+        suggestion: ["Close the path or mark the connector as an open seam instead of a closed loop."]
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+function isSubpathBreak(previous, current, next) {
+  return current.moveTo || next.moveTo || previous.moveTo;
+}
+
+function round(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+function roundPoint(point) {
+  return { x: round(point.x), y: round(point.y) };
+}
