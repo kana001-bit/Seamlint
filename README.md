@@ -19,13 +19,13 @@ npm run check:sample-json
 Compare two paths in the sample SVG:
 
 ```sh
-node ./src/cli/slint.js check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
+node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
 ```
 
 Use a stricter length tolerance to see a seam length warning:
 
 ```sh
-node ./src/cli/slint.js check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap --length-tolerance-mm 0.5
+node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap --length-tolerance-mm 0.5
 ```
 
 Check whether two connector endpoints continue smoothly:
@@ -92,6 +92,19 @@ const report = checkGeometryRequest(request, {
 });
 ```
 
+An `eased-seam` check can also provide an expected ease ratio range:
+
+```js
+const report = checkGeometryRequest(request, {
+  sources: {
+    "./pattern.svg": svgText
+  }
+});
+
+// request.checks[n].tolerance can include:
+// { easeRatio: [0.02, 0.08] }
+```
+
 The library API does not read files. Callers load SVG text and pass it in, while Seamlint returns structured reports and diagnostics.
 
 ## Current MVP
@@ -102,6 +115,7 @@ The library API does not read files. Callers load SVG text and pass it in, while
 - Reports `geometry.curve_kink`
 - Reports `geometry.open_loop`
 - Reports `geometry.seam_length_mismatch`
+- Reports `geometry.ease_amount_out_of_range`
 - Reports `geometry.endpoint_gap`
 - Reports `geometry.tangent_mismatch`
 - Emits text or JSON diagnostics

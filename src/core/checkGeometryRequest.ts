@@ -1,6 +1,23 @@
-import { checkSvgPath, statusForDiagnostics } from "./checkSvgPath.js";
+import { checkSvgPath, statusForDiagnostics } from "./checkSvgPath.ts";
+import type {
+  CheckOptions,
+  CheckReport,
+  Diagnostic,
+  GeometryCheckRequest,
+  GeometryCheckSpec,
+  GeometryPartRef,
+  GeometryRequestOptions,
+  GeometryRequestReport,
+  GeometryTarget,
+  GeometryTolerance
+} from "../types.ts";
 
-export function checkGeometryRequest(request, options = {}) {
+type Sources = Record<string, string>;
+
+export function checkGeometryRequest(
+  request: GeometryCheckRequest,
+  options: GeometryRequestOptions = {}
+): GeometryRequestReport {
   const sources = options.sources ?? {};
   const reports = request.checks.map((check) => checkOne(request, check, sources));
   const diagnostics = reports.flatMap((report) => report.diagnostics);
@@ -13,7 +30,12 @@ export function checkGeometryRequest(request, options = {}) {
   };
 }
 
-function checkOne(request, check, sources) {
+function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sources: Sources): CheckReport {
+  const easeToleranceError = validateEaseTolerance(check);
+  if (easeToleranceError) {
+    return easeToleranceError;
+  }
+
   const fromPart = findPart(request, check.from.partId);
   if (!fromPart) {
     return errorReport(check, targetFor(check.from), "geometry.part_not_found", `Geometry part "${check.from.partId}" was not found.`);
@@ -49,7 +71,7 @@ function checkOne(request, check, sources) {
       path: fromPath,
       target: targetFor(check.from),
       closed: true,
-      ...toleranceOptions(check.tolerance)
+      ...toleranceOptions(check)
     });
   }
 
@@ -94,7 +116,7 @@ function checkOne(request, check, sources) {
       compareTarget: targetFor(check.to),
       pairTarget: targetPairFor(check),
       expectSmooth: true,
-      ...toleranceOptions(check.tolerance)
+      ...toleranceOptions(check)
     });
   }
 
@@ -105,7 +127,7 @@ function checkOne(request, check, sources) {
       target: targetFor(check.from),
       compareTarget: targetFor(check.to),
       pairTarget: targetPairFor(check),
-      ...toleranceOptions(check.tolerance)
+      ...toleranceOptions(check)
     });
   }
 
@@ -117,11 +139,11 @@ function checkOne(request, check, sources) {
   );
 }
 
-function findPart(request, partId) {
+function findPart(request: GeometryCheckRequest, partId: string): GeometryPartRef | undefined {
   return request.parts.find((part) => part.partId === partId);
 }
 
-function validatePartUnits(check, part) {
+function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRef): CheckReport | null {
   if (part.unit !== "mm") {
     return errorReport(check, part.partId, "geometry.unsupported_unit", `Geometry part "${part.partId}" must use unit "mm".`);
   }
@@ -131,37 +153,82 @@ function validatePartUnits(check, part) {
   return null;
 }
 
-function sourceTextFor(part, sources) {
+function sourceTextFor(part: GeometryPartRef, sources: Sources): string | undefined {
   return part.svgText ?? part.geometryText ?? sources[part.geometrySource];
 }
 
-function pathIdFor(part, pathRef) {
+function pathIdFor(part: GeometryPartRef, pathRef: string): string {
   const path = part.paths[pathRef] ?? pathRef;
   return path.startsWith("#") ? path.slice(1) : path;
 }
 
-function targetFor(target) {
+function targetFor(target: GeometryTarget): string {
   return `${target.partId}.${target.connectorId ?? target.pathRef}`;
 }
 
-function targetPairFor(check) {
+function targetPairFor(check: GeometryCheckSpec): string {
   if (!check.to) {
     return targetFor(check.from);
   }
   return `${targetFor(check.from)}/${targetFor(check.to)}`;
 }
 
-function toleranceOptions(tolerance = {}) {
+function toleranceOptions(check: GeometryCheckSpec): Partial<CheckOptions> {
+  const tolerance: GeometryTolerance = check.tolerance ?? {};
   return {
     lengthToleranceMm: tolerance.lengthMm ?? tolerance.length_mm,
     endpointToleranceMm: tolerance.endpointMm ?? tolerance.endpoint_mm,
     tangentToleranceDeg: tolerance.tangentDeg ?? tolerance.tangent_deg,
-    angleThresholdDeg: tolerance.angleDeg ?? tolerance.angle_deg
+    angleThresholdDeg: tolerance.angleDeg ?? tolerance.angle_deg,
+    // ease range は eased-seam 専用。他の kind に混ぜると plain な seam_length_mismatch を握りつぶす。
+    easeRatioRange: check.kind === "eased-seam" ? normalizeEaseRatioRange(rawEaseRatio(check)) : undefined
   };
 }
 
-function errorReport(check, target, code, message) {
-  const diagnostics = [
+// eased-seam に ease range が渡されていて、かつ不正なときだけ error report を返す。
+// 未指定なら null (plain length check に素直にフォールバックする)。
+function validateEaseTolerance(check: GeometryCheckSpec): CheckReport | null {
+  if (check.kind !== "eased-seam") {
+    return null;
+  }
+
+  const raw = rawEaseRatio(check);
+  if (raw === undefined || normalizeEaseRatioRange(raw)) {
+    return null;
+  }
+
+  return errorReport(
+    check,
+    targetPairFor(check),
+    "geometry.invalid_tolerance",
+    `Check "${check.id}" has an invalid easeRatio range; expected [min, max] with 0 <= min <= max.`
+  );
+}
+
+function rawEaseRatio(check: GeometryCheckSpec): readonly [number, number] | undefined {
+  return check.tolerance?.easeRatio ?? check.tolerance?.ease_ratio;
+}
+
+function normalizeEaseRatioRange(value: readonly [number, number] | undefined): readonly [number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return undefined;
+  }
+
+  const [minRatio, maxRatio] = value;
+  if (
+    !Number.isFinite(minRatio) ||
+    !Number.isFinite(maxRatio) ||
+    minRatio < 0 ||
+    maxRatio < minRatio
+  ) {
+    return undefined;
+  }
+
+  return [minRatio, maxRatio];
+}
+
+function errorReport(check: GeometryCheckSpec, target: string, code: string, message: string): CheckReport {
+  const diagnostics: Diagnostic[] = [
     {
       severity: "error",
       code,

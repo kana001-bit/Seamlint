@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertSupportedUnitScale, parseSvgPathData } from "../src/geometry/svgPath.js";
-import { samplePath } from "../src/geometry/samplePath.js";
-import { polylineLength } from "../src/geometry/vector.js";
-import { checkCurveSmoothness } from "../src/rules/curveSmoothness.js";
-import { checkSeamLengthCompatibility } from "../src/rules/seamLengthCompatibility.js";
+import { assertSupportedUnitScale, parseSvgPathData } from "../src/geometry/svgPath.ts";
+import { samplePath } from "../src/geometry/samplePath.ts";
+import { polylineLength } from "../src/geometry/vector.ts";
+import { checkCurveSmoothness } from "../src/rules/curveSmoothness.ts";
+import { checkSeamLengthCompatibility } from "../src/rules/seamLengthCompatibility.ts";
 
 test("parses implicit line-to coordinates after moveto", () => {
   // Protects spec: extra coordinate pairs after M/m are line segments, not new subpath starts.
@@ -77,5 +77,11 @@ test("checks the closing angle of closed paths", () => {
     angleThresholdDeg: 25
   });
 
-  assert.ok(diagnostics.some((diagnostic) => diagnostic.code === "geometry.curve_kink" && diagnostic.actual.point.x === 0));
+  assert.ok(
+    diagnostics.some(
+      (diagnostic) =>
+        diagnostic.code === "geometry.curve_kink" &&
+        (diagnostic.actual as { point: { x: number } }).point.x === 0
+    )
+  );
 });
