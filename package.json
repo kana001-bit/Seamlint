@@ -1,0 +1,23 @@
+{
+  "name": "seamlint",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "bin": {
+    "slint": "./src/cli/slint.js"
+  },
+  "scripts": {
+    "check:sample": "node ./src/cli/slint.js check ./examples/armhole-kink.svg --path body-armhole",
+    "check:sample-json": "node ./src/cli/slint.js check ./examples/armhole-kink.svg --path body-armhole --json",
+    "check:smooth": "node ./src/cli/slint.js check ./examples/smooth-join.svg --path front-yoke --compare-to front-panel --expect-smooth",
+    "check:smooth-json": "node ./src/cli/slint.js check ./examples/smooth-join.svg --path front-yoke --compare-to front-panel --expect-smooth --json",
+    "check:gap": "node ./src/cli/slint.js check ./examples/endpoint-gap.svg --path upper-seam --compare-to lower-seam --expect-smooth",
+    "check:gap-json": "node ./src/cli/slint.js check ./examples/endpoint-gap.svg --path upper-seam --compare-to lower-seam --expect-smooth --json",
+    "check:open-loop": "node ./src/cli/slint.js check ./examples/open-loop.svg --path neckline-loop --closed",
+    "check:open-loop-json": "node ./src/cli/slint.js check ./examples/open-loop.svg --path neckline-loop --closed --json",
+    "test": "node --test"
+  }
+}
