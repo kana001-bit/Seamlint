@@ -1,9 +1,10 @@
-import { extractPathDataById, parseSvgPathData } from "../geometry/svgPath.js";
-import { samplePath } from "../geometry/samplePath.js";
-import { polylineLength } from "../geometry/vector.js";
-import { checkCurveSmoothness } from "../rules/curveSmoothness.js";
-import { checkEndpointTangentCompatibility } from "../rules/endpointTangentCompatibility.js";
-import { checkSeamLengthCompatibility } from "../rules/seamLengthCompatibility.js";
+import { extractPathDataById, parseSvgPathData } from "../geometry/svgPath.ts";
+import { samplePath } from "../geometry/samplePath.ts";
+import { polylineLength } from "../geometry/vector.ts";
+import { checkCurveSmoothness } from "../rules/curveSmoothness.ts";
+import { checkEndpointTangentCompatibility } from "../rules/endpointTangentCompatibility.ts";
+import { checkSeamLengthCompatibility } from "../rules/seamLengthCompatibility.ts";
+import type { CheckOptions, CheckReport, Diagnostic, ReportStatus, SampledPoint } from "../types.ts";
 
 const DEFAULT_OPTIONS = {
   curveSteps: 24,
@@ -16,7 +17,7 @@ const DEFAULT_OPTIONS = {
   expectSmooth: false
 };
 
-export function checkSvgPath(svgText, options = {}) {
+export function checkSvgPath(svgText: string, options: CheckOptions = {}): CheckReport {
   const settings = { ...DEFAULT_OPTIONS, ...options };
   if (!settings.path) {
     throw new Error("Missing --path <id>.");
@@ -49,7 +50,8 @@ export function checkSvgPath(svgText, options = {}) {
       diagnostics.push(
         ...checkSeamLengthCompatibility(fromPoints, toPoints, {
           target: pairTarget,
-          toleranceMm: settings.lengthToleranceMm
+          toleranceMm: settings.lengthToleranceMm,
+          easeRatioRange: settings.easeRatioRange
         })
       );
     }
@@ -65,7 +67,7 @@ export function checkSvgPath(svgText, options = {}) {
   };
 }
 
-export function pointsForPath(svgText, pathId, options = {}) {
+export function pointsForPath(svgText: string, pathId: string, options: CheckOptions = {}): SampledPoint[] {
   const settings = { ...DEFAULT_OPTIONS, ...options };
   const pathData = extractPathDataById(svgText, pathId);
   const commands = parseSvgPathData(pathData);
@@ -75,7 +77,7 @@ export function pointsForPath(svgText, pathId, options = {}) {
   });
 }
 
-export function statusForDiagnostics(diagnostics) {
+export function statusForDiagnostics(diagnostics: readonly Diagnostic[]): ReportStatus {
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return "error";
   }
@@ -85,6 +87,6 @@ export function statusForDiagnostics(diagnostics) {
   return "ok";
 }
 
-function round(value) {
+function round(value: number): number {
   return Math.round(value * 1000) / 1000;
 }

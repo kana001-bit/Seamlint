@@ -60,6 +60,7 @@ CLI 表示の都合だけで field を rename しない。display-only な変更
 - `geometry.curve_kink`
 - `geometry.open_loop`
 - `geometry.seam_length_mismatch`
+- `geometry.ease_amount_out_of_range`
 - `geometry.endpoint_gap`
 - `geometry.tangent_mismatch`
 - `geometry.too_few_points`
@@ -72,6 +73,7 @@ CLI 表示の都合だけで field を rename しない。display-only な変更
 - `geometry.source_not_loaded`
 - `geometry.path_ref_not_found`
 - `geometry.missing_check_target`
+- `geometry.invalid_tolerance`
 - `geometry.cross_source_check_unsupported`
 - `geometry.unsupported_check_kind`
 - `geometry.unsupported_unit`
@@ -100,7 +102,7 @@ target conventions:
 ```sh
 npm run check:sample
 npm run check:sample-json
-node ./src/cli/slint.js check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
+node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
 ```
 
 test runner を追加するなら、まず `node:test` を優先します。各 test には守っている behavior を短く書くコメントを入れます。

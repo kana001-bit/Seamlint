@@ -1,7 +1,18 @@
-import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.js";
+import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.ts";
+import type { Diagnostic, Point, SampledPoint } from "../types.ts";
 
-export function checkCurveSmoothness(points, options = {}) {
-  const diagnostics = [];
+interface CurveSmoothnessOptions {
+  target?: string;
+  expectClosed?: boolean;
+  angleThresholdDeg?: number;
+  closedEndpointThresholdMm?: number;
+}
+
+export function checkCurveSmoothness(
+  points: readonly SampledPoint[],
+  options: CurveSmoothnessOptions = {}
+): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
   const angleThresholdDeg = options.angleThresholdDeg ?? 25;
   const closedEndpointThresholdMm = options.closedEndpointThresholdMm ?? 0.5;
   const target = options.target ?? "path";
@@ -43,11 +54,12 @@ export function checkCurveSmoothness(points, options = {}) {
   }
 
   if (options.expectClosed) {
-    const closingAngle = angleBetweenDegrees(
-      subtract(points[0], points.at(-2)),
-      subtract(points[1], points[0])
-    );
-    if (!points[0].moveTo && !points.at(-1).moveTo && closingAngle > angleThresholdDeg) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    const secondLast = points[points.length - 2];
+    const second = points[1];
+    const closingAngle = angleBetweenDegrees(subtract(first, secondLast), subtract(second, first));
+    if (!first.moveTo && !last.moveTo && closingAngle > angleThresholdDeg) {
       diagnostics.push({
         severity: "warning",
         code: "geometry.curve_kink",
@@ -56,13 +68,13 @@ export function checkCurveSmoothness(points, options = {}) {
         expected: { maxAngleDeg: angleThresholdDeg },
         actual: {
           angleDeg: round(closingAngle),
-          point: roundPoint(points[0])
+          point: roundPoint(first)
         },
         suggestion: ["Check whether the closing corner is intentional or should be smoothed."]
       });
     }
 
-    const endpointGap = distance(points[0], points.at(-1));
+    const endpointGap = distance(first, last);
     if (endpointGap > closedEndpointThresholdMm) {
       diagnostics.push({
         severity: "error",
@@ -79,14 +91,14 @@ export function checkCurveSmoothness(points, options = {}) {
   return diagnostics;
 }
 
-function isSubpathBreak(previous, current, next) {
-  return current.moveTo || next.moveTo || previous.moveTo;
+function isSubpathBreak(previous: SampledPoint, current: SampledPoint, next: SampledPoint): boolean {
+  return Boolean(current.moveTo || next.moveTo || previous.moveTo);
 }
 
-function round(value) {
+function round(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-function roundPoint(point) {
+function roundPoint(point: Point): Point {
   return { x: round(point.x), y: round(point.y) };
 }

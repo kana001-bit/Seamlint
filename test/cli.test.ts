@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-function runSlint(args) {
-  return spawnSync(process.execPath, ["./src/cli/slint.js", ...args], {
+function runSlint(args: string[]) {
+  return spawnSync(process.execPath, ["./src/cli/slint.ts", ...args], {
     cwd: process.cwd(),
     encoding: "utf8"
   });
@@ -153,7 +153,7 @@ test("runs smooth-join expectation checks from the CLI", () => {
   assert.equal(result.status, 0);
   assert.equal(report.status, "warning");
   assert.equal(report.target, "front-yoke/front-panel");
-  assert.deepEqual(report.diagnostics.map((diagnostic) => diagnostic.code), ["geometry.tangent_mismatch"]);
+  assert.deepEqual(report.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), ["geometry.tangent_mismatch"]);
 });
 
 test("runs endpoint gap checks from the CLI", () => {
@@ -173,7 +173,7 @@ test("runs endpoint gap checks from the CLI", () => {
   assert.equal(result.status, 0);
   assert.equal(report.status, "warning");
   assert.equal(report.target, "upper-seam/lower-seam");
-  assert.deepEqual(report.diagnostics.map((diagnostic) => diagnostic.code), ["geometry.endpoint_gap"]);
+  assert.deepEqual(report.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), ["geometry.endpoint_gap"]);
 });
 
 test("reports open loops from the CLI when closed paths are required", () => {
@@ -192,5 +192,5 @@ test("reports open loops from the CLI when closed paths are required", () => {
   assert.equal(result.stderr, "");
   assert.equal(report.status, "error");
   assert.equal(report.target, "neckline-loop");
-  assert.deepEqual(report.diagnostics.map((diagnostic) => diagnostic.code), ["geometry.open_loop"]);
+  assert.deepEqual(report.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), ["geometry.open_loop"]);
 });

@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { checkSvgPath } from "../core/checkSvgPath.js";
-import { formatDiagnosticsText } from "../diagnostics/format.js";
+import { checkSvgPath } from "../core/checkSvgPath.ts";
+import { formatDiagnosticsText } from "../diagnostics/format.ts";
+import type { CheckOptions, CheckReport } from "../types.ts";
 
-async function main(argv) {
+interface NumberConstraints {
+  integer?: boolean;
+  min?: number;
+  max?: number;
+}
+
+async function main(argv: string[]): Promise<number> {
   try {
     const [command, filePath, ...rest] = argv;
     if (command !== "check" || !filePath) {
@@ -33,14 +40,14 @@ async function main(argv) {
     if (wantsJson(argv)) {
       console.log(JSON.stringify(errorReport(error, { target: targetFromArgs(argv) }), null, 2));
     } else {
-      console.error(`Seamlint error: ${error.message}`);
+      console.error(`Seamlint error: ${errorMessage(error)}`);
     }
     return 1;
   }
 }
 
-function parseOptions(args) {
-  const options = {
+function parseOptions(args: string[]): CheckOptions {
+  const options: CheckOptions = {
     curveSteps: 24,
     angleThresholdDeg: 25,
     lengthToleranceMm: 3,
@@ -81,7 +88,7 @@ function parseOptions(args) {
   return options;
 }
 
-function parseNumberOption(optionName, rawValue, constraints = {}) {
+function parseNumberOption(optionName: string, rawValue: string | undefined, constraints: NumberConstraints = {}): number {
   if (rawValue === undefined || rawValue.startsWith("--")) {
     throw new Error(`${optionName} requires a numeric value.`);
   }
@@ -103,7 +110,7 @@ function parseNumberOption(optionName, rawValue, constraints = {}) {
   return value;
 }
 
-function printUsage() {
+function printUsage(): void {
   console.log(`Usage:
   slint check <svg-file> --path <path-id> [options]
 
@@ -121,11 +128,11 @@ Options:
   --tangent-tolerance-deg <number>  Tangent mismatch warning threshold. Default: 8.`);
 }
 
-function wantsJson(argv) {
+function wantsJson(argv: string[]): boolean {
   return argv.includes("--json");
 }
 
-function targetFromArgs(argv) {
+function targetFromArgs(argv: string[]): string {
   const path = valueAfter(argv, "--path");
   const compareTo = valueAfter(argv, "--compare-to");
   if (path && compareTo) {
@@ -134,20 +141,20 @@ function targetFromArgs(argv) {
   return path ?? "command";
 }
 
-function valueAfter(argv, optionName) {
+function valueAfter(argv: string[], optionName: string): string | null {
   const index = argv.indexOf(optionName);
-  if (index === -1) {
+  if (index === -1 || index + 1 >= argv.length) {
     return null;
   }
 
   const value = argv[index + 1];
-  if (value === undefined || value.startsWith("--")) {
+  if (value.startsWith("--")) {
     return null;
   }
   return value;
 }
 
-function errorReport(error, options) {
+function errorReport(error: unknown, options: { target: string }): CheckReport {
   const target = options.target ?? "command";
   const classification = classifyError(error);
   return {
@@ -159,64 +166,64 @@ function errorReport(error, options) {
         severity: "error",
         code: classification.code,
         target,
-        message: error.message,
+        message: errorMessage(error),
         suggestion: classification.suggestion
       }
     ]
   };
 }
 
-function classifyError(error) {
-  if (error.message.startsWith("Could not find <path id=")) {
+function classifyError(error: unknown): { code: string; suggestion: string[] } {
+  const message = errorMessage(error);
+  const code = errorCode(error);
+
+  if (message.startsWith("Could not find <path id=")) {
     return {
       code: "geometry.path_not_found",
       suggestion: ["Check the --path or --compare-to id against the SVG path id attributes."]
     };
   }
-  if (error.message.startsWith("Unsupported SVG path command:")) {
+  if (message.startsWith("Unsupported SVG path command:")) {
     return {
       code: "geometry.unsupported_svg_command",
       suggestion: ["Use only MVP-supported path commands: M, L, H, V, C, Q, and Z."]
     };
   }
-  if (error.message.startsWith("Unsupported SVG transform")) {
+  if (message.startsWith("Unsupported SVG transform")) {
     return {
       code: "geometry.unsupported_transform",
       suggestion: ["Flatten the transform into the path coordinates (bake it in) before running Seamlint."]
     };
   }
-  if (error.message.startsWith("Unsupported non-unit viewBox scale")) {
+  if (message.startsWith("Unsupported non-unit viewBox scale")) {
     return {
       code: "geometry.unsupported_viewbox_scale",
       suggestion: ["Re-export the SVG at 1:1 so 1 user unit equals 1 mm, or set unit-matching width/height."]
     };
   }
-  if (
-    error.message.includes("SVG path data") ||
-    error.message.startsWith("Command ")
-  ) {
+  if (message.includes("SVG path data") || message.startsWith("Command ")) {
     return {
       code: "geometry.invalid_svg_path",
       suggestion: ["Check that the SVG path data is complete and uses valid numeric parameters."]
     };
   }
-  if (error.code === "ENOENT") {
+  if (code === "ENOENT") {
     return {
       code: "input.file_not_found",
       suggestion: ["Check the SVG file path passed to slint check."]
     };
   }
-  if (error.code === "EACCES" || error.code === "EPERM") {
+  if (code === "EACCES" || code === "EPERM") {
     return {
       code: "input.file_permission_denied",
       suggestion: ["Check file permissions for the SVG input."]
     };
   }
   if (
-    error.message.startsWith("Missing --") ||
-    error.message.includes(" requires ") ||
-    error.message.includes(" must be ") ||
-    error.message.startsWith("Unknown option:")
+    message.startsWith("Missing --") ||
+    message.includes(" requires ") ||
+    message.includes(" must be ") ||
+    message.startsWith("Unknown option:")
   ) {
     return {
       code: "cli.invalid_arguments",
@@ -229,11 +236,23 @@ function classifyError(error) {
   };
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
 main(process.argv.slice(2))
   .then((exitCode) => {
     process.exitCode = exitCode;
   })
-  .catch((error) => {
-    console.error(`Seamlint error: ${error.message}`);
+  .catch((error: unknown) => {
+    console.error(`Seamlint error: ${errorMessage(error)}`);
     process.exitCode = 1;
   });

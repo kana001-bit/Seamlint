@@ -1,5 +1,7 @@
-export function formatDiagnosticsText(result) {
-  const lines = [];
+import type { CheckReport } from "../types.ts";
+
+export function formatDiagnosticsText(result: CheckReport): string {
+  const lines: string[] = [];
   lines.push(`Seamlint: ${result.status}`);
   lines.push(`Target: ${result.target}`);
   lines.push(`Length: ${result.lengthMm} mm`);

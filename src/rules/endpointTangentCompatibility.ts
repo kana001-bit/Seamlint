@@ -1,7 +1,26 @@
-import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.js";
+import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.ts";
+import type { Diagnostic, Point, SampledPoint } from "../types.ts";
 
-export function checkEndpointTangentCompatibility(fromPoints, toPoints, options = {}) {
-  const diagnostics = [];
+interface EndpointTangentOptions {
+  target?: string;
+  endpointToleranceMm?: number;
+  tangentToleranceDeg?: number;
+}
+
+interface Join {
+  gap: number;
+  fromPoint: Point;
+  toPoint: Point;
+  fromFlow: Point;
+  toFlow: Point;
+}
+
+export function checkEndpointTangentCompatibility(
+  fromPoints: readonly SampledPoint[],
+  toPoints: readonly SampledPoint[],
+  options: EndpointTangentOptions = {}
+): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
   const target = options.target ?? "seam";
   const endpointToleranceMm = options.endpointToleranceMm ?? 0.5;
   const tangentToleranceDeg = options.tangentToleranceDeg ?? 8;
@@ -61,19 +80,24 @@ export function checkEndpointTangentCompatibility(fromPoints, toPoints, options 
   return diagnostics;
 }
 
+interface Endpoint {
+  point: SampledPoint;
+  atEnd: boolean;
+}
+
 // Pick which end of each path forms the join by taking the closest endpoint pair,
 // then describe the travel direction ("flow") through that join in the from -> to sense.
-function nearestEndpoints(fromPoints, toPoints) {
-  const fromEndpoints = [
+function nearestEndpoints(fromPoints: readonly SampledPoint[], toPoints: readonly SampledPoint[]): Join {
+  const fromEndpoints: Endpoint[] = [
     { point: fromPoints[0], atEnd: false },
-    { point: fromPoints.at(-1), atEnd: true }
+    { point: fromPoints[fromPoints.length - 1], atEnd: true }
   ];
-  const toEndpoints = [
+  const toEndpoints: Endpoint[] = [
     { point: toPoints[0], atEnd: false },
-    { point: toPoints.at(-1), atEnd: true }
+    { point: toPoints[toPoints.length - 1], atEnd: true }
   ];
 
-  let best = null;
+  let best: { gap: number; from: Endpoint; to: Endpoint } | undefined;
   for (const from of fromEndpoints) {
     for (const to of toEndpoints) {
       const gap = distance(from.point, to.point);
@@ -81,6 +105,10 @@ function nearestEndpoints(fromPoints, toPoints) {
         best = { gap, from, to };
       }
     }
+  }
+
+  if (!best) {
+    throw new Error("Cannot find nearest endpoints without sampled points.");
   }
 
   return {
@@ -95,23 +123,21 @@ function nearestEndpoints(fromPoints, toPoints) {
 // Direction of travel through the join, oriented as if walking from `from` into `to`.
 // A smooth continuation keeps the same direction, so both vectors point the same way
 // and the angle between them is ~0.
-function flowTangent(points, atEnd, role) {
+function flowTangent(points: readonly SampledPoint[], atEnd: boolean, role: "arriving" | "leaving"): Point {
+  const last = points[points.length - 1];
+  const secondLast = points[points.length - 2];
   if (role === "arriving") {
     // The join is the end of the flow through `from`: head toward the joint.
-    return atEnd
-      ? subtract(points.at(-1), points.at(-2))
-      : subtract(points[0], points[1]);
+    return atEnd ? subtract(last, secondLast) : subtract(points[0], points[1]);
   }
   // "leaving": the join is the start of the flow through `to`: head away into its body.
-  return atEnd
-    ? subtract(points.at(-2), points.at(-1))
-    : subtract(points[1], points[0]);
+  return atEnd ? subtract(secondLast, last) : subtract(points[1], points[0]);
 }
 
-function round(value) {
+function round(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-function roundPoint(point) {
+function roundPoint(point: Point): Point {
   return { x: round(point.x), y: round(point.y) };
 }
