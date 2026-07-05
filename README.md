@@ -105,6 +105,29 @@ const report = checkGeometryRequest(request, {
 // { easeRatio: [0.02, 0.08] }
 ```
 
+A `gathered-seam` check requires explicit marker ranges on both sides, plus an optional gather ratio range:
+
+```js
+const report = checkGeometryRequest(request, {
+  sources: {
+    "./pattern.svg": svgText
+  }
+});
+
+// request.parts[n].markers can include normalized marker positions:
+// { gather_start: { pathRef: "cap", position: 0.1 } }
+//
+// request.checks[n] can include:
+// {
+//   kind: "gathered-seam",
+//   range: {
+//     from: { startMarker: "gather_start", endMarker: "gather_end" },
+//     to: { startMarker: "seam_start", endMarker: "seam_end" }
+//   },
+//   tolerance: { gatherRatio: [1.3, 2.0] }
+// }
+```
+
 The library API does not read files. Callers load SVG text and pass it in, while Seamlint returns structured reports and diagnostics.
 
 ## Current MVP
@@ -116,6 +139,10 @@ The library API does not read files. Callers load SVG text and pass it in, while
 - Reports `geometry.open_loop`
 - Reports `geometry.seam_length_mismatch`
 - Reports `geometry.ease_amount_out_of_range`
+- Reports `geometry.gather_ratio_out_of_range`
+- Reports `geometry.gather_source_shorter_than_target`
+- Reports `geometry.gather_range_missing`
+- Reports `geometry.gather_markers_inconsistent`
 - Reports `geometry.endpoint_gap`
 - Reports `geometry.tangent_mismatch`
 - Emits text or JSON diagnostics

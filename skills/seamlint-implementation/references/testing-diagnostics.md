@@ -27,7 +27,7 @@ Diagnostic は JSON-serializable で、CLI JSON output と互換性のある形�
 - `actual`: diagnostic の原因になった measured values。
 - `suggestion`: 次に見られる行動の候補。automatic fix の命令として書かない。
 
-CLI 表示の都合だけで field を rename しない。display-only な変更は `src/diagnostics/format.js` に置く。
+CLI 表示の都合だけで field を rename しない。display-only な変更は `src/diagnostics/format.ts` に置く。
 
 数値フィールド (`actual` / `expected` / `lengthMm`) は finite で、境界で丸めた値だけを出す。
 `NaN` / `Infinity` / (数値のつもりの) `null` を出さない。zero-length ベクトルや点不足など、
@@ -61,6 +61,10 @@ CLI 表示の都合だけで field を rename しない。display-only な変更
 - `geometry.open_loop`
 - `geometry.seam_length_mismatch`
 - `geometry.ease_amount_out_of_range`
+- `geometry.gather_ratio_out_of_range`
+- `geometry.gather_source_shorter_than_target`
+- `geometry.gather_range_missing`
+- `geometry.gather_markers_inconsistent`
 - `geometry.endpoint_gap`
 - `geometry.tangent_mismatch`
 - `geometry.too_few_points`
