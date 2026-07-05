@@ -1,35 +1,41 @@
 # Seamlint Agent Rules
 
-このファイルは常時読む入口だけを置きます。詳しい実装ルールは
-`skills/seamlint-implementation/` に集約します。
+This file only keeps the always-on entry points.
 
-## この skill を使う場面
+- Read `skills/seamlint-implementation/` for Seamlint implementation rules.
+- Read `skills/branch-worklog/` for branch-scoped plan, progress, and handoff notes.
 
-次の作業では `skills/seamlint-implementation/` を読みます。
+## Read `skills/seamlint-implementation/` when
 
-- `src/` 以下の geometry parser、sampler、vector math、rule、core、CLI を触るとき
-- diagnostic の shape、code、severity、target、JSON/text 出力を触るとき
-- examples、fixtures、tests、sample command を追加または変更するとき
-- Loomit 連携 contract、rule registration、project docs、`AGENTS.md` を触るとき
+- touching `src/` geometry parser, sampler, vector math, rules, core, or CLI
+- changing diagnostic shape, code, severity, target, or JSON/text output
+- adding or changing examples, fixtures, tests, or sample commands
+- editing Loomit contracts, rule registration, project docs, or `AGENTS.md`
 
-## 常に守る境界
+## Read `skills/branch-worklog/` when
 
-- **黙って誤計測しない。** `transform`、非等倍 `viewBox`、未対応 SVG command、点不足は
-  silent に通さず explicit な `error` にする。詳細は
-  `skills/seamlint-implementation/references/critical-invariants.md`。
-- Seamlint は read-only geometry linter。明示的な設計変更なしに auto-fix や CAD 編集を足さない。
-- rule evaluation と CLI 表示・exit status は分ける。rule は structured diagnostic を返し、表示は formatter/CLI が担当する。
-- `code`、`target`、`severity`、`actual`、`expected`、`suggestion` は下流との contract。軽く rename しない。
-- 単位対応を入れる task でない限り、座標は `mm`、`scale` は `1` として扱う。MVP の SVG 対応は `M`、`L`、`H`、`V`、`C`、`Q`、`Z` と明示する。
+- creating or updating anything under `docs/branch/`
+- leaving a plan, progress log, or handoff for the current Git branch
+- preparing work so another session or another AI can resume quickly
 
-## 読み方
+## Always protect these boundaries
 
-- 変更対象を先に切り分け、必要な reference だけ読む。
-- 古い docs に文字化けがある場合は `README.md`、現在のソースコード、読める ASCII 部分を優先する。
+- Never measure silently when the geometry assumptions are broken. Unsupported `transform`, non-unit `viewBox` scaling, unsupported SVG commands, and too-few-points cases must become explicit `error` diagnostics. See `skills/seamlint-implementation/references/critical-invariants.md`.
+- Seamlint is a read-only geometry linter. Do not add auto-fix or CAD editing behavior unless the user explicitly asks for a design change.
+- Keep rule evaluation separate from CLI display and exit status. Rules return structured diagnostics; formatters and the CLI render them.
+- Treat `code`, `target`, `severity`, `actual`, `expected`, and `suggestion` as downstream contract fields. Do not casually rename them.
+- Unless the task is explicitly about unit support, treat coordinates as `mm` and `scale` as `1`. MVP SVG support stays limited to `M`, `L`, `H`, `V`, `C`, `Q`, and `Z`.
+- Keep branch notes short, factual, and dated. Prefer appending progress over rewriting history.
 
-## 確認
+## Reading order
 
-- 挙動を変えたら関連する sample command を実行する。基本は `npm run check:sample`。
-- JSON 出力を触ったら `npm run check:sample-json` も実行する。
-- seam 比較を触ったら `node ./src/cli/slint.js check ... --compare-to ...` 形式の直接コマンドも実行する。
-- 実行できなかった check があれば理由を明記する。
+- Narrow the change surface first, then read only the references that matter.
+- If older docs are garbled, prefer `README.md`, current source code, and readable ASCII sections.
+
+## Verification
+
+- When behavior changes, run the relevant sample command. Default: `npm run check:sample`.
+- If JSON output changes, also run `npm run check:sample-json`.
+- If seam comparison logic changes, also run a direct `node ./src/cli/slint.ts check ... --compare-to ...` command.
+- If branch-note tooling changes, run `node ./skills/branch-worklog/scripts/ensure_branch_note.mjs`.
+- If any check could not run, say why.
