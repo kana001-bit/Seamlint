@@ -16,7 +16,7 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
   (`Length: ... mm`)。`viewBox` と physical size が食い違ったり、path や親 `<g>` に
   `transform` があると、1 user unit が 1 mm ではなくなり、報告する寸法がすべて silent に
   狂います。10 倍ずれた寸法が warning すら出さずに通れば、下流(裁断)は気づけません。
-- 実装状況 (`src/geometry/svgPath.js`):
+- 実装状況 (`src/geometry/svgPath.ts`):
   - path 要素の `transform=` → `error` (`geometry.unsupported_transform`)。
   - path を囲む `<g transform=...>` → `error` (best-effort な regex 走査。full XML
     parser ではない。深いネストや属性値中の `>` は取りこぼし得る)。
@@ -39,7 +39,7 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
   誤差が積もり、長さ比較 (`seam_length_mismatch`) で片側が直線・片側が曲線、あるいは曲率が
   違う 2 本を **別々の精度**で比べることになり、系統誤差が default tolerance (3mm) に
   匹敵し得ます。→ 真に同長の seam を mismatch と誤検出、または本物を見逃す。
-- 実装状況 (`src/geometry/samplePath.js`):
+- 実装状況 (`src/geometry/samplePath.ts`):
   - 直線・曲線とも共有の弧長ターゲット `spacingMm` (既定 5mm) で分割する。曲線は
     `curveSteps` (既定 24) を **最低サンプル数の floor** として、長い曲線は弧長に応じて
     さらに細かく分割する (`curveSampleCount`)。密度が曲線長に比例するようになった。
@@ -52,7 +52,7 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
     diagnostic を必ず再確認する。数値が動く場合は final response で明記する。
   - 内部計算は丸めない。丸めは diagnostic 境界のみ (`round()`)。
 - 検証: 長い曲線で、adaptive の報告長が高分解能 reference に対し誤差 <0.2mm、かつ旧来の
-  固定 24 分割より誤差が小さいことを test 済み (`test/geometry.test.js`)。
+  固定 24 分割より誤差が小さいことを test 済み (`test/geometry.test.ts`)。
 
 ## C3. False positive は linter の価値を壊す — warning は precision 優先
 
@@ -73,7 +73,7 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
 ## C4. 幾何推定 (接線・角度) はサンプリング産物であって真値ではない
 
 - なぜシビア: 接線 flow は端点の **最後の 1 chord (2 点)** だけで決めています
-  (`src/rules/endpointTangentCompatibility.js` の `flowTangent`)。この向きは
+  (`src/rules/endpointTangentCompatibility.ts` の `flowTangent`)。この向きは
   `curveSteps` に依存し、ノイズを含みます。それに 8° の tolerance をぶつけているので、
   サンプリングを粗くすると滑らかな join が corner 判定に化けたり、逆もあり得ます。
 - 守ること:
@@ -105,7 +105,7 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
 - 守ること:
   - 明示的な compatibility break でない限り、既存 code / field 名を変えない
     (一覧は `references/testing-diagnostics.md`)。表示だけの変更は
-    `src/diagnostics/format.js` に閉じる。
+    `src/diagnostics/format.ts` に閉じる。
   - `actual` / `expected` の数値は finite で、境界で丸めた値のみ。`NaN` / `Infinity` /
     `null` を数値フィールドに出さない。
   - `status` / diagnostic 件数 / code 名が変わる変更は final response で明記する。
