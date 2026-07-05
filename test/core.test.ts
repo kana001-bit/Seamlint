@@ -255,6 +255,337 @@ test("reports an invalid ease ratio range instead of silently ignoring it", () =
   assert.equal(report.diagnostics[0].target, "body.armhole/sleeve.sleeve_cap");
 });
 
+test("accepts gathered seams whose source/target ratio stays inside the configured range", () => {
+  // Protects spec: gathered-seam uses explicit marker ranges and a gather ratio window.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        },
+        tolerance: { gatherRatio: [1.2, 1.4] }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "ok");
+  assert.deepEqual(report.diagnostics, []);
+});
+
+test("accepts gathered seam ranges written in the documented snake_case shape", () => {
+  // Protects spec: the Loomit integration doc's YAML uses start_marker / end_marker, and the
+  // request contract already absorbs snake_case tolerances, so the range shape must match too.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { start_marker: "gather_start", end_marker: "gather_end" },
+          to: { start_marker: "seam_start", end_marker: "seam_end" }
+        },
+        tolerance: { gather_ratio: [1.2, 1.4] }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "ok");
+  assert.deepEqual(report.diagnostics, []);
+});
+
+test("reports gathered seams whose ratio falls outside the configured range", () => {
+  // Protects spec: gathered-seam emits a dedicated ratio diagnostic rather than a plain seam mismatch.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        },
+        tolerance: { gather_ratio: [1.4, 1.8] }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "warning");
+  assert.equal(report.diagnostics[0].code, "geometry.gather_ratio_out_of_range");
+  assert.equal(report.diagnostics[0].target, "sleeve.cap/cuff.seam");
+});
+
+test("reports gathered seams whose source side is shorter than the target side", () => {
+  // Protects spec: gathered source must not be shorter than the seam it is supposed to gather into.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#straight" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#longer" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        },
+        tolerance: { gatherRatio: [1.1, 1.5] }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "warning");
+  assert.equal(report.diagnostics[0].code, "geometry.gather_source_shorter_than_target");
+});
+
+test("reports missing gathered seam ranges instead of guessing whole-path lengths", () => {
+  // Protects spec: gathered-seam needs explicit ranges and must not silently fall back to full paths.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.gather_range_missing");
+});
+
+test("reports inconsistent gathered seam markers instead of measuring the wrong range", () => {
+  // Protects spec: missing or misattached gather markers are configuration errors, not warnings.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer", other: "#straight" },
+        markers: {
+          gather_start: { pathRef: "other", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.gather_markers_inconsistent");
+});
+
+test("reports an invalid gather ratio range instead of silently ignoring it", () => {
+  // Protects spec: gathered-seam ratio bounds are validated before geometry is measured.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        },
+        tolerance: { gatherRatio: [1.4, 1.2] }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.invalid_tolerance");
+});
+
 test("reports unloaded geometry sources in request adapter", () => {
   // Protects spec: core request adapter does not perform file I/O and reports missing preloaded sources.
   const report = checkGeometryRequest({
