@@ -86,6 +86,10 @@ geometry.tangent_jump
 ```text
 geometry.seam_length_mismatch
 geometry.ease_amount_out_of_range
+geometry.gather_ratio_out_of_range
+geometry.gather_source_shorter_than_target
+geometry.gather_range_missing
+geometry.gather_markers_inconsistent
 ```
 
 ### 3. Endpoint Tangent Compatibility
@@ -189,6 +193,18 @@ compatibility:
     tolerance:
       length_mm: 3
       ease_ratio: [0.02, 0.08]
+  - from: sleeve.cap
+    to: cuff.seam
+    join_kind: gathered-seam
+    range:
+      from:
+        start_marker: gather_start
+        end_marker: gather_end
+      to:
+        start_marker: seam_start
+        end_marker: seam_end
+    tolerance:
+      gather_ratio: [1.3, 2.0]
 ```
 
 ## Integration Contract
@@ -208,6 +224,7 @@ interface GeometryPartRef {
   unit: "mm";
   scale: number;
   paths: Record<string, string>;
+  markers?: Record<string, GeometryMarkerRef>;
 }
 
 interface GeometryCheckSpec {
@@ -216,6 +233,7 @@ interface GeometryCheckSpec {
   from: GeometryTarget;
   to?: GeometryTarget;
   tolerance?: GeometryTolerance;
+  range?: GeometryCheckRange;
 }
 
 interface GeometryTarget {
@@ -223,7 +241,46 @@ interface GeometryTarget {
   pathRef: string;
   connectorId?: string;
 }
+
+interface GeometryMarkerRef {
+  pathRef: string;
+  position: number; // normalized 0..1 along the measured path
+}
+
+interface GeometryCheckRange {
+  from: GeometryMarkerRange;
+  to: GeometryMarkerRange;
+}
+
+interface GeometryMarkerRange {
+  startMarker: string;
+  endMarker: string;
+}
 ```
+
+`gathered-seam` is intentionally stricter than plain seam checks. Seamlint does not guess a gather span from the whole path.
+If the caller does not provide explicit marker ranges, Seamlint returns `geometry.gather_range_missing` instead of
+silently measuring the wrong section.
+
+Length-based checks and point-based checks have different source requirements.
+
+- `sewn-seam`, `eased-seam`, and `gathered-seam` should be allowed to compare parts from different
+  `geometrySource` values, because they only compare measured lengths.
+- `smooth-continuation` and future overlap-style checks still need a shared source or a future explicit
+  alignment/orientation contract, because they compare positions and tangents.
+
+This matters for real pattern pieces such as `body.armhole` and `sleeve.sleeve_cap`, which are often exported as
+different parts even though seam-length comparison remains meaningful.
+
+> **実装ステータス(2026-07 時点): この cross-source 許可はまだ未実装。**
+> 現状の `checkGeometryRequest` は全種別の cross-source を `geometry.cross_source_check_unsupported` で弾く。
+> さらに `checkSvgPath` は `path` と `compareTo` を単一の `svgText` から読むため、長さ比較の経路自体が
+> 単一ドキュメント前提になっている(`gathered-seam` も両辺を1つの `svgText` から取る)。別ソース比較を
+> 有効にするには、2つの source text を通す signature 変更と、長さ専用の cross-source 比較経路の新設が必要で、
+> ガードを外すだけでは動かない。詳細は下記「実装順」の該当ステップと
+> [seamlint-immediate-checks.md](./seamlint-immediate-checks.md) を参照。
+
+See also: [seamlint-immediate-checks.md](./seamlint-immediate-checks.md)
 
 MVP の Seamlint core は file I/O を持たない。`geometrySource` は Loomit 側の参照名として扱い、呼び出し側が次のように preloaded source を渡す。
 
@@ -308,13 +365,14 @@ MVP では、`unit: mm` と `scale: 1` を明示した入力だけをサポー�
 
 1. Seamlint 単独で SVG path を読み、曲線長を出す
 2. 単独 path の smoothness warning を出す
-3. 2つの path の長さ差 warning を出す
+3. 2つの path の長さ差 warning を出す(同一 source 内)
 4. `GeometryDiagnostic` を安定させる
-5. Loomit の connector から `GeometryCheckRequest` を作る adapter を設計する
-6. Loomit core に rule registry を作る
-7. Seamlint rule pack を registry に登録する
-8. `loom check` に geometry warning を混ぜる
-9. `compatibility_overrides` で Seamlint の warning を抑制できるようにする
+5. 長さ系(`sewn-seam` / `eased-seam` / `gathered-seam`)を cross-source 比較できるよう、`checkSvgPath` を2つの source text 対応にリファクタし、長さ系に限って `cross_source_check_unsupported` を解除する
+6. Loomit の connector から `GeometryCheckRequest` を作る adapter を設計する
+7. Loomit core に rule registry を作る
+8. Seamlint rule pack を registry に登録する
+9. `loom check` に geometry warning を混ぜる
+10. `compatibility_overrides` で Seamlint の warning を抑制できるようにする
 
 先に Seamlint 単独で数学部分を試し、後から Loomit に接続する方がよい。Loomit 連携を先に作ると、幾何処理の不確実さとプロジェクトモデルの不確実さが混ざる。
 

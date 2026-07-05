@@ -51,7 +51,7 @@ Seamlint は pattern file を変更せず、geometry risk を説明します。
 - tolerance は safe default を持つ option として明示する。
 - **サンプリング誤差は、主張する tolerance より明確に小さく保つ。** 直線・曲線とも共有の
   弧長ターゲット `spacingMm` (既定 5mm) で分割し、曲線は `curveSteps` (既定 24) を floor に
-  長さ比例で細かくする (`src/geometry/samplePath.js` の `curveSampleCount`)。密度が曲線長に
+  長さ比例で細かくする (`src/geometry/samplePath.ts` の `curveSampleCount`)。密度が曲線長に
   比例するので、長い曲線の過小評価が抑えられる。この方式を変えたら長さ系 diagnostic を
   必ず再確認する。
 - 接線・角度・曲率の推定は、サンプリング密度に対して頑健にする。端点接線を最後の 1 chord
@@ -65,7 +65,7 @@ Seamlint は pattern file を変更せず、geometry risk を説明します。
 Seamlint の計測値は物理寸法として下流に流れます。座標系の取り違えは silent に誤った寸法を
 生むため、最優先の急所です (`references/critical-invariants.md` C1)。
 
-- `src/geometry/svgPath.js` の `extractPathDataById` は path を読む前に座標系ガードを通す:
+- `src/geometry/svgPath.ts` の `extractPathDataById` は path を読む前に座標系ガードを通す:
   path の `transform=` → `geometry.unsupported_transform`、囲む `<g transform=...>` →
   同 code (best-effort regex 走査)、非等倍 `viewBox` × physical width/height →
   `geometry.unsupported_viewbox_scale`。いずれも `error`。このガードを弱めない。

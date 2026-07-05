@@ -1,0 +1,4 @@
+interface:
+  display_name: "Branch Worklog"
+  short_description: "Create and maintain docs/branch work notes."
+  default_prompt: "Use $branch-worklog to create or update the current branch progress note in docs/branch."

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { assertSupportedUnitScale, parseSvgPathData } from "../src/geometry/svgPath.ts";
 import { samplePath } from "../src/geometry/samplePath.ts";
-import { polylineLength } from "../src/geometry/vector.ts";
+import { measureRangeOnPolyline, polylineLength } from "../src/geometry/vector.ts";
 import { checkCurveSmoothness } from "../src/rules/curveSmoothness.ts";
 import { checkSeamLengthCompatibility } from "../src/rules/seamLengthCompatibility.ts";
 
@@ -23,6 +23,34 @@ test("does not connect separate subpaths when measuring length", () => {
   // Protects spec: M starts a new subpath and must not add a hidden seam-length segment.
   const points = samplePath(parseSvgPathData("M 0 0 L 10 0 M 100 0 L 110 0"));
   assert.equal(polylineLength(points), 20);
+});
+
+test("measures a normalized range on one continuous subpath", () => {
+  // Protects spec: gathered-seam ranges can be measured from normalized marker positions.
+  const points = samplePath(parseSvgPathData("M 0 0 L 10 0 L 20 0"));
+  assert.deepEqual(measureRangeOnPolyline(points, 0.25, 0.75), {
+    length: 10,
+    crossesSubpathBreak: false
+  });
+});
+
+test("flags normalized ranges that cross a subpath break", () => {
+  // Protects spec: gathered ranges must stay on one continuous path segment.
+  const points = samplePath(parseSvgPathData("M 0 0 L 10 0 M 100 0 L 110 0"));
+  assert.deepEqual(measureRangeOnPolyline(points, 0.25, 0.75), {
+    length: 10,
+    crossesSubpathBreak: true
+  });
+});
+
+test("keeps a range that begins exactly on a subpath boundary on one subpath", () => {
+  // Protects spec: a passmark placed at the start of the second subpath must not be misread as
+  // crossing a subpath break; the whole [0.5, 0.75] span sits on the second subpath.
+  const points = samplePath(parseSvgPathData("M 0 0 L 10 0 M 100 0 L 110 0"));
+  assert.deepEqual(measureRangeOnPolyline(points, 0.5, 0.75), {
+    length: 5,
+    crossesSubpathBreak: false
+  });
 });
 
 test("reports too few points for seam length checks", () => {
