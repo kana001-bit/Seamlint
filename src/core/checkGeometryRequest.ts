@@ -98,12 +98,13 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
     return toUnitError;
   }
 
-  if (toPart.geometrySource !== fromPart.geometrySource) {
+  const toSvgText = sourceTextFor(toPart, sources);
+  if (!toSvgText) {
     return errorReport(
       check,
-      targetPairFor(check),
-      "geometry.cross_source_check_unsupported",
-      "MVP geometry request checks require both targets to use the same geometry source."
+      targetFor(check.to),
+      "geometry.source_not_loaded",
+      `Geometry source "${toPart.geometrySource}" was not provided to Seamlint.`
     );
   }
 
@@ -118,6 +119,15 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "smooth-continuation") {
+    if (toPart.geometrySource !== fromPart.geometrySource || toSvgText !== svgText) {
+      return errorReport(
+        check,
+        targetPairFor(check),
+        "geometry.cross_source_check_unsupported",
+        "MVP smooth continuation checks require both targets to resolve to the same SVG source text."
+      );
+    }
+
     return checkSvgPath(svgText, {
       path: fromPath,
       compareTo: toPath,
@@ -133,6 +143,7 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
     return checkSvgPath(svgText, {
       path: fromPath,
       compareTo: toPath,
+      compareSvgText: toSvgText,
       target: targetFor(check.from),
       compareTarget: targetFor(check.to),
       pairTarget: targetPairFor(check),
@@ -141,7 +152,7 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "gathered-seam") {
-    return checkGatheredSeam(svgText, check, fromPart, fromPath, toPart, toPath);
+    return checkGatheredSeam(svgText, toSvgText, check, fromPart, fromPath, toPart, toPath);
   }
 
   return errorReport(
@@ -153,7 +164,8 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
 }
 
 function checkGatheredSeam(
-  svgText: string,
+  fromSvgText: string,
+  toSvgText: string,
   check: GeometryCheckSpec,
   fromPart: GeometryPartRef,
   fromPath: string,
@@ -179,8 +191,8 @@ function checkGatheredSeam(
     return toRange.error;
   }
 
-  const fromPoints = pointsForPath(svgText, fromPath, toleranceOptions(check));
-  const toPoints = pointsForPath(svgText, toPath, toleranceOptions(check));
+  const fromPoints = pointsForPath(fromSvgText, fromPath, toleranceOptions(check));
+  const toPoints = pointsForPath(toSvgText, toPath, toleranceOptions(check));
   const measuredFromRange = measureRangeOnPolyline(fromPoints, fromRange.startPosition, fromRange.endPosition);
   const measuredToRange = measureRangeOnPolyline(toPoints, toRange.startPosition, toRange.endPosition);
 
