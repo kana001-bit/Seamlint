@@ -48,6 +48,7 @@ export interface GeometryRequestReport {
 export interface CheckOptions {
   path?: string;
   compareTo?: string;
+  compareSvgText?: string;
   target?: string;
   compareTarget?: string;
   pairTarget?: string;
