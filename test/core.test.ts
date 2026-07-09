@@ -19,6 +19,12 @@ const SVG = `
   <path id="multi" d="M 0 0 L 10 0 M 100 0 L 110 0" />
 </svg>`;
 
+const OTHER_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path id="remote-straight" d="M 0 0 L 10 0" />
+  <path id="remote-longer" d="M 0 0 L 13 0" />
+</svg>`;
+
 test("returns a core report without CLI file or stdout work", () => {
   // Protects spec: core builds the same structured report shape that CLI formats.
   assert.deepEqual(checkSvgPath(SVG, { path: "straight" }), {
@@ -52,6 +58,34 @@ test("runs seam length comparison from core API", () => {
   assert.equal(report.status, "warning");
   assert.equal(report.target, "straight/longer");
   assert.equal(report.diagnostics[0].code, "geometry.seam_length_mismatch");
+});
+
+test("runs seam length comparison across two SVG sources from core API", () => {
+  // Protects spec: length-only callers can compare preloaded geometry from different SVG documents.
+  const report = checkSvgPath(SVG, {
+    path: "straight",
+    compareTo: "remote-longer",
+    compareSvgText: OTHER_SVG,
+    lengthToleranceMm: 1
+  });
+
+  assert.equal(report.status, "warning");
+  assert.equal(report.target, "straight/remote-longer");
+  assert.equal(report.diagnostics[0].code, "geometry.seam_length_mismatch");
+});
+
+test("rejects cross-source smooth checks from the core API", () => {
+  // Protects spec: smooth continuation still requires one shared SVG source in the core API.
+  assert.throws(
+    () =>
+      checkSvgPath(SVG, {
+        path: "straight",
+        compareTo: "remote-straight",
+        compareSvgText: OTHER_SVG,
+        expectSmooth: true
+      }),
+    /Cross-source smooth continuation checks are not supported/
+  );
 });
 
 test("exposes sampled points through core path helper", () => {
@@ -100,6 +134,122 @@ test("runs a Loomit-style geometry request over preloaded sources", () => {
   assert.equal(report.reports[0].target, "body.armhole/sleeve.sleeve_cap");
   assert.equal(report.diagnostics[0].target, "body.armhole/sleeve.sleeve_cap");
   assert.equal(report.diagnostics[0].code, "geometry.seam_length_mismatch");
+});
+
+test("allows cross-source seam length checks in geometry requests", () => {
+  // Protects spec: length-only seam checks can compare parts from different preloaded SVG sources.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./body.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#straight" }
+      },
+      {
+        partId: "sleeve",
+        geometrySource: "./sleeve.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { sleeve_cap: "#remote-longer" }
+      }
+    ],
+    checks: [
+      {
+        id: "armhole-length",
+        kind: "sewn-seam",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
+        to: { partId: "sleeve", pathRef: "sleeve_cap", connectorId: "sleeve_cap" },
+        tolerance: { lengthMm: 1 }
+      }
+    ]
+  }, {
+    sources: {
+      "./body.svg": SVG,
+      "./sleeve.svg": OTHER_SVG
+    }
+  });
+
+  assert.equal(report.status, "warning");
+  assert.equal(report.diagnostics[0].code, "geometry.seam_length_mismatch");
+  assert.equal(report.diagnostics[0].target, "body.armhole/sleeve.sleeve_cap");
+});
+
+test("keeps smooth continuation checks same-source for now", () => {
+  // Protects spec: endpoint/tangent checks still require one shared coordinate frame.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./body.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#straight" }
+      },
+      {
+        partId: "sleeve",
+        geometrySource: "./sleeve.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { sleeve_cap: "#remote-straight" }
+      }
+    ],
+    checks: [
+      {
+        id: "armhole-smooth",
+        kind: "smooth-continuation",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
+        to: { partId: "sleeve", pathRef: "sleeve_cap", connectorId: "sleeve_cap" }
+      }
+    ]
+  }, {
+    sources: {
+      "./body.svg": SVG,
+      "./sleeve.svg": OTHER_SVG
+    }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.cross_source_check_unsupported");
+});
+
+test("rejects smooth continuation when the same source name resolves to different SVG texts", () => {
+  // Protects spec: same-source means the resolved SVG text must match, not just the geometrySource label.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./shared.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#straight" },
+        svgText: SVG
+      },
+      {
+        partId: "sleeve",
+        geometrySource: "./shared.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { sleeve_cap: "#remote-straight" },
+        svgText: OTHER_SVG
+      }
+    ],
+    checks: [
+      {
+        id: "armhole-smooth",
+        kind: "smooth-continuation",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
+        to: { partId: "sleeve", pathRef: "sleeve_cap", connectorId: "sleeve_cap" }
+      }
+    ]
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.cross_source_check_unsupported");
 });
 
 test("accepts eased seams whose length ratio stays inside the configured ease range", () => {
@@ -298,6 +448,59 @@ test("accepts gathered seams whose source/target ratio stays inside the configur
     ]
   }, {
     sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "ok");
+  assert.deepEqual(report.diagnostics, []);
+});
+
+test("accepts gathered seams across two SVG sources when both marker ranges are explicit", () => {
+  // Protects spec: gathered-seam can measure one ranged segment per side even when the parts come from
+  // different source SVG documents.
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./sleeve.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#remote-longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./cuff.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "sleeve-gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        },
+        tolerance: { gatherRatio: [1.2, 1.4] }
+      }
+    ]
+  }, {
+    sources: {
+      "./sleeve.svg": OTHER_SVG,
+      "./cuff.svg": SVG
+    }
   });
 
   assert.equal(report.status, "ok");
