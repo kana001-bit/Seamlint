@@ -80,6 +80,17 @@ const report = checkSvgPath(svgText, {
 });
 ```
 
+When the comparison path lives in a different SVG document, pass that second source explicitly:
+
+```js
+const report = checkSvgPath(bodySvgText, {
+  path: "body-armhole",
+  compareTo: "sleeve-cap",
+  compareSvgText: sleeveSvgText,
+  lengthToleranceMm: 0.5
+});
+```
+
 Check a Loomit-style geometry request over preloaded SVG sources:
 
 ```js
@@ -87,10 +98,14 @@ import { checkGeometryRequest } from "seamlint";
 
 const report = checkGeometryRequest(request, {
   sources: {
-    "./pattern.svg": svgText
+    "./body.svg": bodySvgText,
+    "./sleeve.svg": sleeveSvgText
   }
 });
 ```
+
+`sewn-seam`, `eased-seam`, and `gathered-seam` may compare different `geometrySource` values as long as
+their SVG texts are preloaded in `sources`. `smooth-continuation` still stays same-source for the MVP.
 
 An `eased-seam` check can also provide an expected ease ratio range:
 

@@ -25,6 +25,9 @@ export function checkSvgPath(svgText: string, options: CheckOptions = {}): Check
   if (settings.expectSmooth && !settings.compareTo) {
     throw new Error("--expect-smooth requires --compare-to <path-id>.");
   }
+  if (settings.expectSmooth && settings.compareSvgText !== undefined && settings.compareSvgText !== svgText) {
+    throw new Error("Cross-source smooth continuation checks are not supported by the MVP core API.");
+  }
 
   const fromPoints = pointsForPath(svgText, settings.path, settings);
   const target = settings.target ?? settings.path;
@@ -35,7 +38,8 @@ export function checkSvgPath(svgText: string, options: CheckOptions = {}): Check
   });
 
   if (settings.compareTo) {
-    const toPoints = pointsForPath(svgText, settings.compareTo, settings);
+    const compareSvgText = settings.compareSvgText ?? svgText;
+    const toPoints = pointsForPath(compareSvgText, settings.compareTo, settings);
     const compareTarget = settings.compareTarget ?? settings.compareTo;
     const pairTarget = settings.pairTarget ?? `${target}/${compareTarget}`;
     if (settings.expectSmooth) {
