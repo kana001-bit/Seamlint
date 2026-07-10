@@ -194,3 +194,39 @@ test("reports open loops from the CLI when closed paths are required", () => {
   assert.equal(report.target, "neckline-loop");
   assert.deepEqual(report.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), ["geometry.open_loop"]);
 });
+
+test("inspects an SVG export from the CLI", () => {
+  // Protects spec: real export verification should be runnable from the CLI before geometry measurement starts.
+  const result = runSlint([
+    "inspect",
+    "./test/fixtures/export-inspect.svg",
+    "--json"
+  ]);
+
+  const report = JSON.parse(result.stdout);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  assert.equal(report.status, "warning");
+  assert.equal(report.summary.pathCount, 2);
+  assert.equal(report.summary.pathIdMissingCount, 1);
+  assert.equal(report.summary.markerCandidateCount, 1);
+  assert.equal(report.paths[0].id, "body-armhole");
+  assert.equal(report.paths[1].id, null);
+  assert.deepEqual(report.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), [
+    "svg.unit_scale_supported",
+    "svg.path_id_missing",
+    "svg.marker_candidates_found"
+  ]);
+});
+
+test("prints inspect results as text when --json is omitted", () => {
+  // Protects spec: the human-readable inspect formatter is a real, exercised output path, not just --json.
+  const result = runSlint(["inspect", "./test/fixtures/export-inspect.svg"]);
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^SVG Export Inspection: /);
+  assert.match(result.stdout, /Status: warning/);
+  assert.match(result.stdout, /Marker candidates: 1/);
+  assert.match(result.stdout, /- #1 id=body-armhole/);
+});

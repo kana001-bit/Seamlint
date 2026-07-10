@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { inspectSvgExport } from "../core/inspectSvgExport.ts";
 import { checkSvgPath } from "../core/checkSvgPath.ts";
-import { formatDiagnosticsText } from "../diagnostics/format.ts";
+import { formatDiagnosticsText, formatInspectionText } from "../diagnostics/format.ts";
 import type { CheckOptions, CheckReport } from "../types.ts";
 
 interface NumberConstraints {
@@ -13,9 +14,21 @@ interface NumberConstraints {
 async function main(argv: string[]): Promise<number> {
   try {
     const [command, filePath, ...rest] = argv;
-    if (command !== "check" || !filePath) {
+    if (!filePath || (command !== "check" && command !== "inspect")) {
       printUsage();
       return 2;
+    }
+
+    if (command === "inspect") {
+      const options = parseInspectOptions(rest);
+      const svgText = await readFile(filePath, "utf8");
+      const result = inspectSvgExport(svgText, { target: filePath });
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(formatInspectionText(result));
+      }
+      return result.status === "ok" ? 0 : 1;
     }
 
     const options = parseOptions(rest);
@@ -34,7 +47,6 @@ async function main(argv: string[]): Promise<number> {
     } else {
       console.log(formatDiagnosticsText(result));
     }
-
     return result.status === "error" ? 1 : 0;
   } catch (error) {
     if (wantsJson(argv)) {
@@ -88,6 +100,20 @@ function parseOptions(args: string[]): CheckOptions {
   return options;
 }
 
+function parseInspectOptions(args: string[]): { json: boolean } {
+  const options = { json: false };
+
+  for (const arg of args) {
+    if (arg === "--json") {
+      options.json = true;
+      continue;
+    }
+    throw new Error(`Unknown option: ${arg}`);
+  }
+
+  return options;
+}
+
 function parseNumberOption(optionName: string, rawValue: string | undefined, constraints: NumberConstraints = {}): number {
   if (rawValue === undefined || rawValue.startsWith("--")) {
     throw new Error(`${optionName} requires a numeric value.`);
@@ -113,6 +139,7 @@ function parseNumberOption(optionName: string, rawValue: string | undefined, con
 function printUsage(): void {
   console.log(`Usage:
   slint check <svg-file> --path <path-id> [options]
+  slint inspect <svg-file> [--json]
 
 Options:
   --compare-to <path-id>            Compare with another path in the same SVG.
@@ -125,7 +152,10 @@ Options:
   --angle-threshold-deg <number>    Curve kink warning threshold. Default: 25.
   --length-tolerance-mm <number>    Seam length warning threshold. Default: 3.
   --endpoint-tolerance-mm <number>  Endpoint gap warning threshold. Default: 0.5.
-  --tangent-tolerance-deg <number>  Tangent mismatch warning threshold. Default: 8.`);
+  --tangent-tolerance-deg <number>  Tangent mismatch warning threshold. Default: 8.
+
+Inspect mode:
+  --json                            Print the export inspection as JSON.`);
 }
 
 function wantsJson(argv: string[]): boolean {
