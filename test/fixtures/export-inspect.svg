@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="80mm" viewBox="0 0 120 80">
+  <g id="passmarks">
+    <line id="notch-front" class="passmark" x1="5" y1="10" x2="10" y2="10" />
+  </g>
+  <path id="body-armhole" d="M 0 0 C 20 10 40 20 60 20" />
+  <path d="M 60 20 L 90 40" />
+</svg>

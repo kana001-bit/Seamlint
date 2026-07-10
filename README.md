@@ -64,6 +64,12 @@ JSON output:
 npm run check:open-loop-json
 ```
 
+Inspect a real exported SVG before trusting it for geometry checks:
+
+```sh
+node ./src/cli/slint.ts inspect ./path/to/exported.svg --json
+```
+
 ## Library API
 
 Seamlint can also be used as a local Node.js package API. This is not a Web API or a server; it is an importable function entrypoint for tools such as Loomit.
@@ -161,6 +167,7 @@ The library API does not read files. Callers load SVG text and pass it in, while
 - Reports `geometry.endpoint_gap`
 - Reports `geometry.tangent_mismatch`
 - Emits text or JSON diagnostics
+- Includes an SVG export inspection mode for checking `viewBox`, transforms, path ids, and marker-like elements before measurement
 
 This is a measuring tool, not a CAD engine. Later versions can replace the MVP parser and sampler with libraries such as `svg-pathdata`, `svg-path-properties`, or `bezier-js`.
 
