@@ -14,6 +14,13 @@ const PARAM_COUNTS = new Map<string, number>([
 
 const UNIT_TO_MM: Record<string, number | undefined> = { mm: 1, cm: 10, in: 25.4 };
 
+export interface SvgPathTagInfo {
+  id: string | null;
+  tag: string;
+  index: number;
+  hasTransform: boolean;
+}
+
 interface ParseState {
   index: number;
 }
@@ -52,12 +59,18 @@ function roundScale(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function attributeValue(tag: string, name: string): string | null {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, "i"));
+  return match ? match[1] : null;
 }
 
 function physicalScale(tag: string, attr: string, viewBoxExtent: number): number | null {
-  const match = tag.match(new RegExp(`\\b${attr}\\s*=\\s*["']\\s*([-\\d.eE+]+)\\s*([a-z%]*)\\s*["']`, "i"));
+  const raw = attributeValue(tag, attr);
+  if (!raw) {
+    return null;
+  }
+
+  const match = raw.match(/^\s*([-\d.eE+]+)\s*([a-z%]*)\s*$/i);
   if (!match) {
     return null;
   }
@@ -70,19 +83,26 @@ function physicalScale(tag: string, attr: string, viewBoxExtent: number): number
   return (Number(match[1]) * mmPerUnit) / viewBoxExtent;
 }
 
-function assertUnitScaleAxis(scale: number | null): void {
-  if (scale === null) {
-    return;
+function unitScaleIssueForTag(tag: string): string | null {
+  const viewBox = tag.match(
+    /\bviewBox\s*=\s*["']\s*[-\d.eE+]+\s+[-\d.eE+]+\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*["']/i
+  );
+  if (!viewBox) {
+    return null;
   }
 
-  if (Math.abs(scale - 1) > 1e-3) {
-    throw new Error(
-      `Unsupported non-unit viewBox scale: 1 SVG user unit maps to ${roundScale(scale)} mm, but Seamlint assumes 1 user unit = 1 mm. Re-export at 1:1 or set unit-matching width/height.`
-    );
+  const widthScale = physicalScale(tag, "width", Number(viewBox[1]));
+  const heightScale = physicalScale(tag, "height", Number(viewBox[2]));
+  const scales = [widthScale, heightScale].filter((scale): scale is number => scale !== null);
+  const unsupported = scales.find((scale) => Math.abs(scale - 1) > 1e-3);
+  if (unsupported === undefined) {
+    return null;
   }
+
+  return `Unsupported non-unit viewBox scale: 1 SVG user unit maps to ${roundScale(unsupported)} mm, but Seamlint assumes 1 user unit = 1 mm. Re-export at 1:1 or set unit-matching width/height.`;
 }
 
-function hasTransformedAncestorGroup(svgText: string, pathIndex: number): boolean {
+export function hasTransformedAncestorGroup(svgText: string, pathIndex: number): boolean {
   const before = svgText.slice(0, pathIndex);
   const groupTag = /<g\b([^>]*?)(\/?)>|<\/g\s*>/gi;
   const openGroups: boolean[] = [];
@@ -113,22 +133,43 @@ function assertPathTransformFree(svgText: string, pathIndex: number, pathTag: st
   }
 }
 
-export function assertSupportedUnitScale(svgText: string): void {
+export function rootSvgTag(svgText: string): string | null {
   const svgTag = svgText.match(/<svg\b[^>]*>/i);
-  if (!svgTag) {
-    return;
+  return svgTag ? svgTag[0] : null;
+}
+
+export function unitScaleIssue(svgText: string): string | null {
+  const tag = rootSvgTag(svgText);
+  if (!tag) {
+    return null;
   }
 
-  const tag = svgTag[0];
-  const viewBox = tag.match(
-    /\bviewBox\s*=\s*["']\s*[-\d.eE+]+\s+[-\d.eE+]+\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*["']/i
-  );
-  if (!viewBox) {
-    return;
+  return unitScaleIssueForTag(tag);
+}
+
+export function assertSupportedUnitScale(svgText: string): void {
+  const issue = unitScaleIssue(svgText);
+  if (issue) {
+    throw new Error(issue);
+  }
+}
+
+export function findPathTags(svgText: string): SvgPathTagInfo[] {
+  const pathPattern = /<path(?=[\s/>])[^>]*>/gi;
+  const paths: SvgPathTagInfo[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = pathPattern.exec(svgText)) !== null) {
+    const tag = match[0];
+    paths.push({
+      id: attributeValue(tag, "id"),
+      tag,
+      index: match.index,
+      hasTransform: /\btransform\s*=/i.test(tag)
+    });
   }
 
-  assertUnitScaleAxis(physicalScale(tag, "width", Number(viewBox[1])));
-  assertUnitScaleAxis(physicalScale(tag, "height", Number(viewBox[2])));
+  return paths;
 }
 
 export function parseSvgPathData(pathData: string): PathCommand[] {
@@ -221,17 +262,15 @@ export function parseSvgPathData(pathData: string): PathCommand[] {
 export function extractPathDataById(svgText: string, id: string): string {
   assertSupportedUnitScale(svgText);
 
-  const escapedId = escapeRegExp(id);
-  const pathPattern = new RegExp(`<path\\b(?=[^>]*\\bid=["']${escapedId}["'])[^>]*>`, "i");
-  const pathMatch = svgText.match(pathPattern);
-  if (!pathMatch) {
+  const lowerId = id.toLowerCase();
+  const pathInfo = findPathTags(svgText).find((path) => path.id !== null && path.id.toLowerCase() === lowerId);
+  if (!pathInfo) {
     throw new Error(`Could not find <path id="${id}">.`);
   }
 
-  const pathTag = pathMatch[0];
-  assertPathTransformFree(svgText, pathMatch.index ?? 0, pathTag, id);
+  assertPathTransformFree(svgText, pathInfo.index, pathInfo.tag, id);
 
-  const dMatch = pathTag.match(/\bd=["']([^"']+)["']/i);
+  const dMatch = pathInfo.tag.match(/\bd=["']([^"']+)["']/i);
   if (!dMatch) {
     throw new Error(`Path "${id}" does not have a d attribute.`);
   }
