@@ -19,13 +19,13 @@ npm run check:sample-json
 Compare two paths in the sample SVG:
 
 ```sh
-node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
+node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
 ```
 
 Use a stricter length tolerance to see a seam length warning:
 
 ```sh
-node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap --length-tolerance-mm 0.5
+node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap --length-tolerance-mm 0.5
 ```
 
 Check whether two connector endpoints continue smoothly:
@@ -67,7 +67,7 @@ npm run check:open-loop-json
 Inspect a real exported SVG before trusting it for geometry checks:
 
 ```sh
-node ./src/cli/slint.ts inspect ./path/to/exported.svg --json
+node ./src/cli/slnt.ts inspect ./path/to/exported.svg --json
 ```
 
 ## Library API
