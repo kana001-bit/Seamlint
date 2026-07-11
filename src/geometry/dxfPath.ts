@@ -287,6 +287,189 @@ export function extractAstmAnchorPoints(dxfText: string, blockName: string): Ast
   return anchors;
 }
 
+// ASTM の layer 4 = notch（合印）POINT。anchor(2/3) とは別に、seam 上の対応確認に使う。
+// notch が無いのは正常（空配列）だが、block 自体が無いのは path_not_found として区別する
+// （extractAstmPolylinePath / extractAstmAnchorPoints と挙動を揃え、silent failure を避ける）。
+export function extractAstmNotchPoints(dxfText: string, blockName: string): Point[] {
+  const groups = readGroups(dxfText);
+  const targetBlock = blockName.trim().toUpperCase();
+
+  let section: string | null = null;
+  let entity: string | null = null;
+  let currentBlock: string | null = null;
+  let foundTargetBlock = false;
+  let pointEntity: PointEntityState | null = null;
+  const notches: Point[] = [];
+
+  const finishPointEntity = () => {
+    if (!pointEntity) {
+      return;
+    }
+
+    if (section === "BLOCKS" && currentBlock === targetBlock && pointEntity.layer === "4") {
+      if (!Number.isFinite(pointEntity.x) || !Number.isFinite(pointEntity.y)) {
+        throw new DxfPathError("geometry.invalid_dxf_path", "DXF POINT is missing x/y coordinates.", {
+          actual: { blockName, layer: "4" }
+        });
+      }
+
+      notches.push({ x: pointEntity.x as number, y: pointEntity.y as number });
+    }
+
+    pointEntity = null;
+  };
+
+  for (const group of groups) {
+    if (group.code === "0") {
+      if (entity === "POINT") {
+        finishPointEntity();
+      }
+
+      entity = group.value;
+
+      if (group.value === "ENDSEC") {
+        section = null;
+        currentBlock = null;
+        continue;
+      }
+
+      if (group.value === "BLOCK" || group.value === "ENDBLK") {
+        currentBlock = null;
+        continue;
+      }
+
+      if (group.value === "POINT") {
+        pointEntity = { layer: null };
+      }
+
+      continue;
+    }
+
+    if (entity === "SECTION" && group.code === "2") {
+      section = group.value.trim().toUpperCase();
+      continue;
+    }
+
+    if (entity === "BLOCK" && section === "BLOCKS" && group.code === "2" && currentBlock === null) {
+      currentBlock = group.value.trim().toUpperCase();
+      if (currentBlock === targetBlock) {
+        foundTargetBlock = true;
+      }
+      continue;
+    }
+
+    if (entity === "POINT" && pointEntity) {
+      if (group.code === "8") {
+        pointEntity.layer = group.value.trim();
+      } else if (group.code === "10") {
+        pointEntity.x = Number(group.value);
+      } else if (group.code === "20") {
+        pointEntity.y = Number(group.value);
+      }
+    }
+  }
+
+  finishPointEntity();
+
+  if (!foundTargetBlock) {
+    throw new DxfPathError("geometry.path_not_found", `DXF block "${blockName}" was not found.`, {
+      expected: { blockName },
+      actual: { blockName }
+    });
+  }
+
+  return notches;
+}
+
+// piece の裁ち枚数を、layer 1 注記 TEXT（例: "Fabric, Cut 2" / "Lining, Cut 2 or 1 on fold"）から拾う。
+// band とピース辺を突き合わせるとき、band 長は「各ピース辺 × 裁ち枚数」の総和になるため必要。
+// 注記が無いのは正常（null）だが、block 自体が無いのは path_not_found として区別する（silent failure 回避）。
+export function extractAstmCutQuantity(dxfText: string, blockName: string): number | null {
+  const groups = readGroups(dxfText);
+  const targetBlock = blockName.trim().toUpperCase();
+
+  let section: string | null = null;
+  let entity: string | null = null;
+  let currentBlock: string | null = null;
+  let foundTargetBlock = false;
+  let textLayer: string | null = null;
+  let textValue: string | null = null;
+  let quantity: number | null = null;
+
+  const finishText = () => {
+    if (
+      quantity === null &&
+      entity === "TEXT" &&
+      section === "BLOCKS" &&
+      currentBlock === targetBlock &&
+      textLayer === "1" &&
+      textValue !== null
+    ) {
+      const match = /\bcut\s+(\d+)/i.exec(textValue);
+      if (match) {
+        quantity = Number.parseInt(match[1], 10);
+      }
+    }
+    textLayer = null;
+    textValue = null;
+  };
+
+  for (const group of groups) {
+    if (group.code === "0") {
+      if (entity === "TEXT") {
+        finishText();
+      }
+
+      entity = group.value;
+
+      if (group.value === "ENDSEC") {
+        section = null;
+        currentBlock = null;
+        continue;
+      }
+
+      if (group.value === "BLOCK" || group.value === "ENDBLK") {
+        currentBlock = null;
+        continue;
+      }
+
+      continue;
+    }
+
+    if (entity === "SECTION" && group.code === "2") {
+      section = group.value.trim().toUpperCase();
+      continue;
+    }
+
+    if (entity === "BLOCK" && section === "BLOCKS" && group.code === "2" && currentBlock === null) {
+      currentBlock = group.value.trim().toUpperCase();
+      if (currentBlock === targetBlock) {
+        foundTargetBlock = true;
+      }
+      continue;
+    }
+
+    if (entity === "TEXT") {
+      if (group.code === "8") {
+        textLayer = group.value.trim();
+      } else if (group.code === "1") {
+        textValue = group.value;
+      }
+    }
+  }
+
+  finishText();
+
+  if (!foundTargetBlock) {
+    throw new DxfPathError("geometry.path_not_found", `DXF block "${blockName}" was not found.`, {
+      expected: { blockName },
+      actual: { blockName }
+    });
+  }
+
+  return quantity;
+}
+
 function readGroups(dxfText: string): DxfGroup[] {
   const lines = dxfText
     .replace(/^\uFEFF/, "")
