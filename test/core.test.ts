@@ -143,7 +143,7 @@ test("runs a Loomit-style geometry request over preloaded sources", () => {
 });
 
 test("defaults geometry requests to svg format when format is omitted", () => {
-  // 莉墓ｧ倅ｿ晁ｭｷ: request contract 縺ｫ format 繧定ｶｳ縺励※繧ゅ∵里蟄倥・ SVG 蜑肴署 caller 縺ｯ縺昴・縺ｾ縺ｾ蜍輔″邯壹￠繧九・
+  // 仕様保護: format を省略した geometry request は、既存の SVG 前提 caller のために svg 形式として扱う。
   const report = checkGeometryRequest({
     projectRoot: ".",
     parts: [
@@ -221,7 +221,7 @@ test("allows cross-source seam length checks in geometry requests", () => {
 });
 
 test("allows sewn-seam checks across svg and dxf geometry sources", () => {
-  // Protects spec: mixed-format seam checks keep the compare-side format instead of reparsing DXF as SVG.
+  // 仕様保護: format 混在の seam check は、DXF を SVG として再 parse せず compare 側の format を保つ。
   const svgText = `
 <svg xmlns="http://www.w3.org/2000/svg">
   <path id="straight" d="M 0 0 L 30 0" />
@@ -538,7 +538,6 @@ test("reports an invalid ease ratio range instead of silently ignoring it", () =
   assert.equal(report.status, "error");
   assert.equal(report.diagnostics[0].code, "geometry.invalid_tolerance");
   // pair-check の error でも from/to の seam identity を保持し、downstream consumer が見失わないようにする。
-  // pair-check 邵ｺ・ｮ error 邵ｺ・ｧ郢ｧ繝ｻfrom/to 邵ｺ・ｮ seam identity 郢ｧ蜑・ｽｿ譎・亜邵ｺ蜉ｱﾂ窶･ownstream consumer 邵ｺ迹夲ｽｦ蜿･・､・ｱ郢ｧ荳岩・邵ｺ繝ｻ・育ｸｺ繝ｻ竊鍋ｸｺ蜷ｶ・狗ｸｲ繝ｻ
   assert.equal(report.diagnostics[0].target, "body.armhole/sleeve.sleeve_cap");
 });
 
@@ -953,7 +952,7 @@ test("reports unloaded geometry sources in request adapter", () => {
 });
 
 test("reports unsupported geometry formats before source lookup", () => {
-  // Protects spec: unsupported request formats become explicit errors instead of looking like missing sources.
+  // 仕様保護: 未対応の request format は、source 欠落のように見せず明示的なエラーにする。
   const report = checkGeometryRequest({
     projectRoot: ".",
     parts: [
@@ -1298,7 +1297,7 @@ EOF
 });
 
 test("allows eased-seam checks across svg and dxf geometry sources", () => {
-  // Protects spec: eased mixed-format checks reuse the compare-side DXF geometry with its own parser.
+  // 仕様保護: format 混在の eased check は、compare 側の DXF geometry を専用 parser で再利用する。
   const svgText = `
 <svg xmlns="http://www.w3.org/2000/svg">
   <path id="straight" d="M 0 0 L 40 0" />
