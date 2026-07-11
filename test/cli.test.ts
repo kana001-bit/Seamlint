@@ -9,6 +9,52 @@ function runSlnt(args: string[]) {
   });
 }
 
+function runSlntWithInput(args: string[], input: string) {
+  return spawnSync(process.execPath, ["./src/cli/slnt.ts", ...args], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    input
+  });
+}
+
+// self-contained request: 各 part が inline geometryText を持つので Seamlint は filesystem 不要。
+function sampleGeometryRequest() {
+  const svg = (id: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100"><path id="${id}" d="M 0 0 L 100 0" /></svg>`;
+
+  return {
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "body.svg",
+        format: "svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#body-armhole" },
+        geometryText: svg("body-armhole")
+      },
+      {
+        partId: "sleeve",
+        geometrySource: "sleeve.svg",
+        format: "svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#sleeve-armhole" },
+        geometryText: svg("sleeve-armhole")
+      }
+    ],
+    checks: [
+      {
+        id: "sewn-seam:body.armhole/sleeve.armhole",
+        kind: "sewn-seam",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
+        to: { partId: "sleeve", pathRef: "armhole", connectorId: "armhole" },
+        tolerance: { length_mm: 3 }
+      }
+    ]
+  };
+}
+
 test("rejects non-numeric threshold options", () => {
   // Protects spec: JSON mode reports invalid CLI numeric input without NaN/null diagnostics.
   const result = runSlnt([
@@ -229,4 +275,49 @@ test("prints inspect results as text when --json is omitted", () => {
   assert.match(result.stdout, /Status: warning/);
   assert.match(result.stdout, /Marker candidates: 1/);
   assert.match(result.stdout, /- #1 id=body-armhole/);
+});
+
+test("runs a Loomit geometry request from stdin (check-request)", () => {
+  // Protects spec: check-request feeds a whole self-contained request through checkGeometryRequest.
+  const result = runSlntWithInput(["check-request", "--json"], JSON.stringify(sampleGeometryRequest()));
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, "ok");
+  assert.equal(report.target, "geometry-request");
+  assert.equal(report.reports.length, 1);
+  assert.equal(report.reports[0].target, "body.armhole/sleeve.armhole");
+});
+
+test("reports invalid request JSON as a structured error with exit 2 (check-request)", () => {
+  // Protects spec: bad handoff input is machine-readable, not a raw crash, so Loomit can surface it.
+  const result = runSlntWithInput(["check-request", "--json"], "{ not valid json");
+
+  assert.equal(result.status, 2);
+  assert.equal(result.stderr, "");
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, "error");
+  assert.equal(report.target, "geometry-request");
+  assert.equal(report.diagnostics[0].code, "cli.invalid_request_json");
+});
+
+test("prints check-request results as text when --json is omitted", () => {
+  // Protects spec: the human-readable geometry-request summary is a real, exercised output path.
+  const result = runSlntWithInput(["check-request"], JSON.stringify(sampleGeometryRequest()));
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^Seamlint geometry-request: ok/);
+  assert.match(result.stdout, /Checks: 1/);
+});
+
+test("rejects a request missing parts/checks arrays with exit 2 (check-request)", () => {
+  // Protects spec: shape validation happens before checkGeometryRequest, so malformed input is guided.
+  const result = runSlntWithInput(["check-request", "--json"], JSON.stringify({ parts: [] }));
+
+  assert.equal(result.status, 2);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "cli.invalid_request_json");
 });
