@@ -1,16 +1,16 @@
-// Shared compatibility surface for Seamlint core, CLI JSON, and Loomit-facing callers.
-// Keep field names stable unless the contract is intentionally revised.
+// Seamlint core、CLI JSON、Loomit 呼び出しで共有する構造定義。
+// 互換性に関わる field 名は、理由なく変更しない。
 export interface Point {
   x: number;
   y: number;
 }
 
-// `moveTo` marks the start of a new sampled subpath.
+// `moveTo` は、新しい sampled subpath の開始点を示す。
 export interface SampledPoint extends Point {
   moveTo?: boolean;
 }
 
-// MVP path commands. H/V are normalized to L during parsing.
+// MVP で扱う path command。H/V は parse 時点で L に正規化する。
 export type PathCommand =
   | { type: "M"; to: Point }
   | { type: "L"; from: Point; to: Point }
@@ -49,6 +49,7 @@ export interface CheckOptions {
   path?: string;
   compareTo?: string;
   compareSvgText?: string;
+  compareGeometrySource?: { format: GeometryFormat; text: string };
   target?: string;
   compareTarget?: string;
   pairTarget?: string;
@@ -64,7 +65,7 @@ export interface CheckOptions {
   easeRatioRange?: readonly [number, number];
 }
 
-// ---- Loomit-oriented request contract ----
+// ---- Loomit 向け request contract ----
 
 export type JoinKind =
   | "smooth-continuation"
@@ -86,8 +87,8 @@ export interface GeometryMarkerRef {
   position: number;
 }
 
-// camelCase and snake_case are both accepted, matching GeometryTolerance so callers can
-// pass the documented Loomit `start_marker` / `end_marker` YAML shape without translation.
+// GeometryMarkerRange では camelCase / snake_case の両方を受け付ける。
+// Loomit documented YAML の `start_marker` / `end_marker` と互換にするため。
 export interface GeometryMarkerRange {
   startMarker?: string;
   endMarker?: string;
@@ -100,7 +101,7 @@ export interface GeometryCheckRange {
   to: GeometryMarkerRange;
 }
 
-// camelCase and snake_case are both accepted in the request contract.
+// request contract では camelCase / snake_case の両方を受け付ける。
 export interface GeometryTolerance {
   lengthMm?: number;
   length_mm?: number;
@@ -125,15 +126,18 @@ export interface GeometryCheckSpec {
   range?: GeometryCheckRange;
 }
 
+export type GeometryFormat = "svg" | "dxf";
+
 export interface GeometryPartRef {
   partId: string;
   geometrySource: string;
-  unit: string; // Only "mm" is supported by the MVP request adapter.
-  scale: number; // Only scale 1 is supported by the MVP request adapter.
+  format?: GeometryFormat; // 非 SVG parser が入るまでは、省略時に "svg" として扱う。
+  unit: string; // MVP request adapter では "mm" のみを受け付ける。
+  scale: number; // MVP request adapter では scale 1 のみを受け付ける。
   paths: Record<string, string>;
   markers?: Record<string, GeometryMarkerRef>;
-  svgText?: string;
-  geometryText?: string;
+  svgText?: string; // 既存 caller 互換のための SVG 専用 alias。
+  geometryText?: string; // format 非依存で受け取る inline geometry text。
 }
 
 export interface GeometryCheckRequest {
