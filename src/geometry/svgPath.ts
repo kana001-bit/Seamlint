@@ -208,8 +208,8 @@ export function parseSvgPathData(pathData: string): PathCommand[] {
       throw new Error(`Command ${currentCommand} requires path parameters.`);
     }
 
-    // Repeated coordinate groups reuse the current command, with moveto switching
-    // subsequent groups to implicit lineto per the SVG path rules.
+    // 繰り返しの座標グループは現在の command を再利用する。ただし moveto の場合は
+    // SVG path の規則に従い、後続グループを暗黙の lineto に切り替える。
     let activeCommand = command;
     while (state.index < tokens.length && !isCommand(tokens[state.index])) {
       const activeUpper = activeCommand.toUpperCase();

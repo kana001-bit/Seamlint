@@ -11,7 +11,7 @@ function readFixture(name: string): string {
 }
 
 test("inspects an SVG export for unit scale, missing path ids, and marker candidates", () => {
-  // Protects spec: export verification needs a structured summary before we trust a real SVG handoff.
+  // 仕様保護: 実際の SVG handoff を信頼する前に、export 検証には構造化されたサマリが要る。
   const svgText = readFixture("export-inspect.svg");
   const report = inspectSvgExport(svgText, { target: "fixture-export" });
 
@@ -44,7 +44,7 @@ test("inspects an SVG export for unit scale, missing path ids, and marker candid
 });
 
 test("reports export blockers when the SVG uses unsupported scale metadata", () => {
-  // Protects spec: export inspection must surface the same scale-trust blocker that geometry checks enforce.
+  // 仕様保護: export の inspect は、geometry check が課すのと同じ scale 信頼性の blocker を表面化しなければならない。
   const svgText = readFixture("scaled-viewbox.svg");
   const report = inspectSvgExport(svgText, { target: "scaled-viewbox" });
 
@@ -53,7 +53,7 @@ test("reports export blockers when the SVG uses unsupported scale metadata", () 
 });
 
 test("reports duplicate path ids via inspect", () => {
-  // Protects spec: id-based path lookup is ambiguous when two <path> elements share an id.
+  // 仕様保護: 2 つの <path> 要素が同じ id を共有すると、id ベースの path 探索は曖昧になる。
   const svgText = readFixture("duplicate-path-ids.svg");
   const report = inspectSvgExport(svgText, { target: "duplicate-ids" });
 
@@ -63,7 +63,7 @@ test("reports duplicate path ids via inspect", () => {
 });
 
 test("reports path and ancestor-group transforms via inspect", () => {
-  // Protects spec: inspect must surface the same transform blocker that check enforces, for every path in the document.
+  // 仕様保護: inspect は、document 内の全 path について、check が課すのと同じ transform の blocker を表面化しなければならない。
   const svgText = readFixture("transformed-path.svg");
   const report = inspectSvgExport(svgText, { target: "transformed-path" });
 
