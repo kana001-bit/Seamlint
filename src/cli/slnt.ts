@@ -138,8 +138,8 @@ function parseNumberOption(optionName: string, rawValue: string | undefined, con
 
 function printUsage(): void {
   console.log(`Usage:
-  slint check <svg-file> --path <path-id> [options]
-  slint inspect <svg-file> [--json]
+  slnt check <svg-file> --path <path-id> [options]
+  slnt inspect <svg-file> [--json]
 
 Options:
   --compare-to <path-id>            Compare with another path in the same SVG.
@@ -240,7 +240,7 @@ function classifyError(error: unknown): { code: string; suggestion: string[] } {
   if (code === "ENOENT") {
     return {
       code: "input.file_not_found",
-      suggestion: ["Check the SVG file path passed to slint check."]
+      suggestion: ["Check the SVG file path passed to slnt check."]
     };
   }
   if (code === "EACCES" || code === "EPERM") {
@@ -257,7 +257,7 @@ function classifyError(error: unknown): { code: string; suggestion: string[] } {
   ) {
     return {
       code: "cli.invalid_arguments",
-      suggestion: ["Run slint check without enough options to see usage, then pass the required arguments."]
+      suggestion: ["Run slnt check without enough options to see usage, then pass the required arguments."]
     };
   }
   return {
