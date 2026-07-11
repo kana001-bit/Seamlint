@@ -15,7 +15,7 @@
     }
   },
   "bin": {
-    "slint": "./dist/cli/slint.js"
+    "slnt": "./dist/cli/slnt.js"
   },
   "files": [
     "dist"
@@ -26,14 +26,14 @@
     "pretest": "npm run typecheck && npm run build",
     "test": "node --test",
     "prepare": "npm run build",
-    "check:sample": "node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole",
-    "check:sample-json": "node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --json",
-    "check:smooth": "node ./src/cli/slint.ts check ./examples/smooth-join.svg --path front-yoke --compare-to front-panel --expect-smooth",
-    "check:smooth-json": "node ./src/cli/slint.ts check ./examples/smooth-join.svg --path front-yoke --compare-to front-panel --expect-smooth --json",
-    "check:gap": "node ./src/cli/slint.ts check ./examples/endpoint-gap.svg --path upper-seam --compare-to lower-seam --expect-smooth",
-    "check:gap-json": "node ./src/cli/slint.ts check ./examples/endpoint-gap.svg --path upper-seam --compare-to lower-seam --expect-smooth --json",
-    "check:open-loop": "node ./src/cli/slint.ts check ./examples/open-loop.svg --path neckline-loop --closed",
-    "check:open-loop-json": "node ./src/cli/slint.ts check ./examples/open-loop.svg --path neckline-loop --closed --json"
+    "check:sample": "node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole",
+    "check:sample-json": "node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole --json",
+    "check:smooth": "node ./src/cli/slnt.ts check ./examples/smooth-join.svg --path front-yoke --compare-to front-panel --expect-smooth",
+    "check:smooth-json": "node ./src/cli/slnt.ts check ./examples/smooth-join.svg --path front-yoke --compare-to front-panel --expect-smooth --json",
+    "check:gap": "node ./src/cli/slnt.ts check ./examples/endpoint-gap.svg --path upper-seam --compare-to lower-seam --expect-smooth",
+    "check:gap-json": "node ./src/cli/slnt.ts check ./examples/endpoint-gap.svg --path upper-seam --compare-to lower-seam --expect-smooth --json",
+    "check:open-loop": "node ./src/cli/slnt.ts check ./examples/open-loop.svg --path neckline-loop --closed",
+    "check:open-loop-json": "node ./src/cli/slnt.ts check ./examples/open-loop.svg --path neckline-loop --closed --json"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
