@@ -1,0 +1,15 @@
+{
+  // エディタ(tsserver)専用: root の tsconfig.json は include:["src"] なので、test/*.ts はどの
+  // プロジェクトにも属さず node 型なしの既定設定で開かれ、node:test / node:fs 等が解決できない。
+  // test/ 直下に最寄り config を置くことで、エディタはこれを使い src/node 型/"seamlint" を解決する。
+  // ビルド(tsc = root)や typecheck(tsc -p tsconfig.test.json)には影響しない。
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "paths": {
+      "seamlint": ["../src/index.ts"]
+    }
+  },
+  "include": ["../src", "."]
+}
