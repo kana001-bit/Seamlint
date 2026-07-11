@@ -69,9 +69,9 @@ interface CheckRequestOptions {
   json: boolean;
 }
 
-// Loomit → Seamlint handoff: a whole GeometryCheckRequest (JSON, self-contained with inline
-// geometryText) comes in via file arg or stdin, and a GeometryRequestReport goes out. This is a
-// thin wrapper over checkGeometryRequest, mirroring how `check` wraps checkSvgPath.
+// Loomit → Seamlint の handoff: inline geometryText を含んで自己完結した GeometryCheckRequest (JSON)
+// 全体を file 引数か stdin で受け取り、GeometryRequestReport を返す。`check` が checkSvgPath を
+// 包むのと同じく、これは checkGeometryRequest の薄い wrapper。
 async function runCheckRequest(args: string[]): Promise<number> {
   let options: CheckRequestOptions;
   try {
