@@ -1,6 +1,6 @@
 import type { Point, SampledPoint } from "../types.ts";
 
-// Tolerance for treating a subpath boundary that sits on the range start/end as "not crossed".
+// range の始点/終点にちょうど乗る subpath 境界を「跨いでいない」とみなすための許容誤差。
 const SUBPATH_BOUNDARY_EPSILON_MM = 1e-9;
 
 export interface MeasuredRange {
@@ -167,9 +167,9 @@ export function measureRangeOnPolyline(
   const startLength = totalLength * startPosition;
   const endLength = totalLength * endPosition;
 
-  // A subpath break only splits the range when it lies strictly inside it. A boundary that
-  // coincides with the range start or end belongs to the adjacent subpath the range stays on,
-  // so a passmark placed exactly at a subpath start is not a cross.
+  // subpath の切れ目が range を分割するのは、それが range の内側に厳密に収まる場合だけ。
+  // range の始点や終点と一致する境界は、range が留まる隣接 subpath に属するので、
+  // subpath の開始点にちょうど置かれた passmark は跨ぎ扱いにしない。
   const crossesSubpathBreak = subpathBoundaryLengths(points).some(
     (boundary) => boundary > startLength + SUBPATH_BOUNDARY_EPSILON_MM && boundary < endLength - SUBPATH_BOUNDARY_EPSILON_MM
   );
@@ -180,7 +180,7 @@ export function measureRangeOnPolyline(
   };
 }
 
-// Cumulative arc lengths (gap-skipped, matching polylineLength) at which a new subpath begins.
+// 新しい subpath が始まる累積弧長(gap を飛ばし、polylineLength と一致させたもの)。
 function subpathBoundaryLengths(points: readonly SampledPoint[]): number[] {
   const boundaries: number[] = [];
   let total = 0;

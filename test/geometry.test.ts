@@ -528,7 +528,7 @@ EOF
 });
 
 test("ignores open layer 1 helper polylines when a closed outer outline is present", () => {
-  // Protects spec: open layer 1 helper geometry must not block a valid closed outer outline from qualifying the seam.
+  // 仕様保護: 開いた layer 1 の補助 geometry が、正しい閉じた外形輪郭の seam 判定を妨げてはいけない。
   const dxfText = `
 0
 SECTION
@@ -765,8 +765,8 @@ test("samples long curves densely enough to keep length error small", () => {
   // その結果、近似 polyline 長が真値に近づき、固定 24 step より精度が上がる。
   const command = parseSvgPathData("M 0 0 C 200 300 -100 300 100 0 C 300 -300 500 300 300 0");
   const reference = polylineLength(samplePath(command, { curveSteps: 5000, curveSpacingMm: 1e9 }));
-  const fixedLow = polylineLength(samplePath(command, { curveSpacingMm: 1e9 })); // floor dominates -> fixed 24
-  const adaptive = polylineLength(samplePath(command)); // default spacing
+  const fixedLow = polylineLength(samplePath(command, { curveSpacingMm: 1e9 })); // floor が支配的 -> 固定 24
+  const adaptive = polylineLength(samplePath(command)); // 既定の spacing
 
   assert.ok(Math.abs(reference - adaptive) < 0.2, `adaptive error ${Math.abs(reference - adaptive)}`);
   assert.ok(Math.abs(reference - adaptive) < Math.abs(reference - fixedLow));

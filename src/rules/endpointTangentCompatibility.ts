@@ -39,7 +39,7 @@ export function checkEndpointTangentCompatibility(
 
   const join = nearestEndpoints(fromPoints, toPoints);
 
-  // G0: do the two connectors actually meet at their nearest endpoints?
+  // G0: 2 つの connector は、最寄りの endpoint 同士で実際に接しているか?
   if (join.gap > endpointToleranceMm) {
     diagnostics.push({
       severity: "warning",
@@ -58,7 +58,7 @@ export function checkEndpointTangentCompatibility(
     });
   }
 
-  // G1: do the tangents line up so the seam continues without a visible corner?
+  // G1: 接線が揃っていて、seam が目に見える角を作らずに連続しているか?
   const tangentDiffDeg = angleBetweenDegrees(join.fromFlow, join.toFlow);
   if (tangentDiffDeg > tangentToleranceDeg) {
     diagnostics.push({
@@ -85,8 +85,8 @@ interface Endpoint {
   atEnd: boolean;
 }
 
-// Pick which end of each path forms the join by taking the closest endpoint pair,
-// then describe the travel direction ("flow") through that join in the from -> to sense.
+// 各 path のどちらの端が join を成すかを、最も近い endpoint の組から選び、
+// その join を通る進行方向("flow")を from -> to の向きで表す。
 function nearestEndpoints(fromPoints: readonly SampledPoint[], toPoints: readonly SampledPoint[]): Join {
   const fromEndpoints: Endpoint[] = [
     { point: fromPoints[0], atEnd: false },
@@ -120,17 +120,17 @@ function nearestEndpoints(fromPoints: readonly SampledPoint[], toPoints: readonl
   };
 }
 
-// Direction of travel through the join, oriented as if walking from `from` into `to`.
-// A smooth continuation keeps the same direction, so both vectors point the same way
-// and the angle between them is ~0.
+// join を通る進行方向。`from` から `to` へ歩いていくのと同じ向きに取る。
+// 滑らかな連続なら向きが保たれるので、両 vector は同じ方向を指し、
+// その間の角度は ~0 になる。
 function flowTangent(points: readonly SampledPoint[], atEnd: boolean, role: "arriving" | "leaving"): Point {
   const last = points[points.length - 1];
   const secondLast = points[points.length - 2];
   if (role === "arriving") {
-    // The join is the end of the flow through `from`: head toward the joint.
+    // join は `from` を通る flow の終端: 接合点へ向かう。
     return atEnd ? subtract(last, secondLast) : subtract(points[0], points[1]);
   }
-  // "leaving": the join is the start of the flow through `to`: head away into its body.
+  // "leaving": join は `to` を通る flow の始端: 接合点から本体側へ離れる向き。
   return atEnd ? subtract(secondLast, last) : subtract(points[1], points[0]);
 }
 
