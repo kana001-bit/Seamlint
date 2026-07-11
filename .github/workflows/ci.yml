@@ -1,0 +1,39 @@
+name: CI
+
+# push(main) と PR で typecheck・build・test を回す。
+# Seamlint は runtime 依存なしの単一 package なので、npm ci → typecheck → build → node --test だけで足りる。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一 ref の古い実行はキャンセルして無駄なランを残さない。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # `npm test` は pretest で typecheck+build を再実行するため、ここでは test runner を直接叩く。
+      - name: Test
+        run: node --test
