@@ -36,6 +36,6 @@ This file only keeps the always-on entry points.
 
 - When behavior changes, run the relevant sample command. Default: `npm run check:sample`.
 - If JSON output changes, also run `npm run check:sample-json`.
-- If seam comparison logic changes, also run a direct `node ./src/cli/slint.ts check ... --compare-to ...` command.
+- If seam comparison logic changes, also run a direct `node ./src/cli/slnt.ts check ... --compare-to ...` command.
 - If branch-note tooling changes, run `node ./skills/branch-worklog/scripts/ensure_branch_note.mjs`.
 - If any check could not run, say why.
