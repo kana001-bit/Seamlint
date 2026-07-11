@@ -1,5 +1,7 @@
 # Seamlint
 
+[![CI](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml/badge.svg)](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml)
+
 A read-only geometry linter for sewing pattern pieces.
 
 *日本語版: [`README.ja.md`](README.ja.md)*

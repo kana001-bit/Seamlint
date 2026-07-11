@@ -1,5 +1,7 @@
 # Seamlint
 
+[![CI](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml/badge.svg)](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml)
+
 縫製パターンのための、read-only な幾何 linter。
 
 _English version: [`README.md`](README.md)_
