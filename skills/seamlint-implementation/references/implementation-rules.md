@@ -10,7 +10,7 @@ Seamlint の source code、package structure、CLI behavior、Loomit integration
 2. path を point list に sample する。
 3. 説明できる geometry check を実行する。
 4. structured diagnostic を返す。
-5. `slint check` から使えるようにする。
+5. `slnt check` から使えるようにする。
 6. diagnostic と rule boundary を通じて、将来の Loomit integration を可能にしておく。
 
 task が明示していない限り、CAD editing、auto-repair、physics simulation、Studio UI、plugin runtime、広範な Loomit project parsing へ先に進まない。

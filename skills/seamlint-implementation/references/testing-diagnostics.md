@@ -51,7 +51,7 @@ CLI 表示の都合だけで field を rename しない。display-only な変更
 - unsupported SVG command
 - invalid command usage
 
-`warning` だけでは `slint check` を失敗 exit にしません。`error` と command/runtime failure は status `1` で終了してよい。
+`warning` だけでは `slnt check` を失敗 exit にしません。`error` と command/runtime failure は status `1` で終了してよい。
 
 ## Codes and Targets
 
@@ -108,7 +108,7 @@ target conventions:
 ```sh
 npm run check:sample
 npm run check:sample-json
-node ./src/cli/slint.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
+node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
 ```
 
 test runner を追加するなら、まず `node:test` を優先します。各 test には守っている behavior を短く書くコメントを入れます。

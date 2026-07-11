@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-function runSlint(args: string[]) {
-  return spawnSync(process.execPath, ["./src/cli/slint.ts", ...args], {
+function runSlnt(args: string[]) {
+  return spawnSync(process.execPath, ["./src/cli/slnt.ts", ...args], {
     cwd: process.cwd(),
     encoding: "utf8"
   });
@@ -11,7 +11,7 @@ function runSlint(args: string[]) {
 
 test("rejects non-numeric threshold options", () => {
   // Protects spec: JSON mode reports invalid CLI numeric input without NaN/null diagnostics.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
     "--path",
@@ -33,7 +33,7 @@ test("rejects non-numeric threshold options", () => {
         code: "cli.invalid_arguments",
         target: "body-armhole",
         message: "--angle-threshold-deg must be a finite number.",
-        suggestion: ["Run slint check without enough options to see usage, then pass the required arguments."]
+        suggestion: ["Run slnt check without enough options to see usage, then pass the required arguments."]
       }
     ]
   });
@@ -41,7 +41,7 @@ test("rejects non-numeric threshold options", () => {
 
 test("rejects missing numeric option values", () => {
   // Protects spec: JSON mode reports missing numeric values instead of consuming the next flag.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
     "--path",
@@ -57,7 +57,7 @@ test("rejects missing numeric option values", () => {
 
 test("reports missing SVG path as JSON diagnostic", () => {
   // Protects spec: JSON mode turns path lookup failures into structured reports.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
     "--path",
@@ -76,7 +76,7 @@ test("reports missing SVG path as JSON diagnostic", () => {
 
 test("reports unsupported SVG commands as JSON diagnostic", () => {
   // Protects spec: JSON mode keeps parser failures machine-readable.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./test/fixtures/unsupported-command.svg",
     "--path",
@@ -91,7 +91,7 @@ test("reports unsupported SVG commands as JSON diagnostic", () => {
 
 test("refuses to measure a path that carries a transform", () => {
   // 仕様保護 (C1): transform は座標を silent に拡大縮小するので、誤計測せず error にする。
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./test/fixtures/transformed-path.svg",
     "--path",
@@ -108,7 +108,7 @@ test("refuses to measure a path that carries a transform", () => {
 
 test("refuses to measure a non-unit viewBox scale", () => {
   // 仕様保護 (C1): physical な width/height と食い違う viewBox は全ての長さを狂わせる。
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./test/fixtures/scaled-viewbox.svg",
     "--path",
@@ -124,7 +124,7 @@ test("refuses to measure a non-unit viewBox scale", () => {
 
 test("keeps text mode errors on stderr", () => {
   // Protects spec: text mode preserves the simple CLI error behavior.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
     "--path",
@@ -138,7 +138,7 @@ test("keeps text mode errors on stderr", () => {
 
 test("runs smooth-join expectation checks from the CLI", () => {
   // Protects spec: --expect-smooth runs endpoint/tangent compatibility instead of length comparison.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/smooth-join.svg",
     "--path",
@@ -158,7 +158,7 @@ test("runs smooth-join expectation checks from the CLI", () => {
 
 test("runs endpoint gap checks from the CLI", () => {
   // Protects spec: --expect-smooth reports endpoint distance before tangent alignment.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/endpoint-gap.svg",
     "--path",
@@ -178,7 +178,7 @@ test("runs endpoint gap checks from the CLI", () => {
 
 test("reports open loops from the CLI when closed paths are required", () => {
   // Protects spec: --closed turns an unjoined loop into a structured error diagnostic.
-  const result = runSlint([
+  const result = runSlnt([
     "check",
     "./examples/open-loop.svg",
     "--path",
@@ -197,7 +197,7 @@ test("reports open loops from the CLI when closed paths are required", () => {
 
 test("inspects an SVG export from the CLI", () => {
   // Protects spec: real export verification should be runnable from the CLI before geometry measurement starts.
-  const result = runSlint([
+  const result = runSlnt([
     "inspect",
     "./test/fixtures/export-inspect.svg",
     "--json"
@@ -221,7 +221,7 @@ test("inspects an SVG export from the CLI", () => {
 
 test("prints inspect results as text when --json is omitted", () => {
   // Protects spec: the human-readable inspect formatter is a real, exercised output path, not just --json.
-  const result = runSlint(["inspect", "./test/fixtures/export-inspect.svg"]);
+  const result = runSlnt(["inspect", "./test/fixtures/export-inspect.svg"]);
 
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
