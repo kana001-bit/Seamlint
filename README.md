@@ -97,7 +97,7 @@ const report = checkSvgPath(bodySvgText, {
 });
 ```
 
-Check a Loomit-style geometry request over preloaded SVG sources:
+Check a Loomit-style geometry request over preloaded geometry sources:
 
 ```js
 import { checkGeometryRequest } from "seamlint";
@@ -110,8 +110,35 @@ const report = checkGeometryRequest(request, {
 });
 ```
 
+Each request part may also declare `format: "svg" | "dxf"`. The request adapter defaults to `svg`
+when `format` is omitted. It also supports ASTM-flavored `dxf` by resolving the requested `pathRef`
+as a DXF `BLOCK` name and measuring that block's closed `layer 14` `POLYLINE`. When a closed
+`layer 1` outline is present in the same block, Seamlint also verifies that the chosen `layer 14`
+seam sits inside that outer cut line instead of trusting the layer label alone. If multiple closed
+`layer 1` outlines enclose the same seam, Seamlint returns an explicit DXF-path error rather than
+guessing which outer line is the real cut line. This keeps seam length checks working now without
+taking on notch/range addressing yet.
+
 `sewn-seam`, `eased-seam`, and `gathered-seam` may compare different `geometrySource` values as long as
-their SVG texts are preloaded in `sources`. `smooth-continuation` still stays same-source for the MVP.
+their geometry texts are preloaded in `sources`. `smooth-continuation` still stays same-source for the MVP.
+The same request shape works for `dxf` too. Once an upstream adapter projects notch/passmark meaning
+into normalized `markers[name] = { pathRef, position }`, Seamlint can run `eased-seam` and
+`gathered-seam` against DXF geometry without any DXF-specific rule fork.
+
+If an upstream tool already knows a raw passmark coordinate from `.val`, Seamlint also exposes a
+helper for the ASTM side of that projection:
+
+```js
+import { projectAstmPassmarkToMarker } from "seamlint";
+
+const marker = projectAstmPassmarkToMarker(dxfText, "FRONT", { x: 120, y: 55 });
+// => { marker: { pathRef: "FRONT", position: 0.37 }, ... }
+```
+
+This helper stays read-only and geometry-only: it does not parse `.val` files itself. It only
+matches the provided point to a unique ASTM `layer 2/3` anchor candidate and then projects that
+anchor onto the measured `layer 14` seam. If either step is ambiguous, it throws an explicit error
+instead of guessing.
 
 An `eased-seam` check can also provide an expected ease ratio range:
 
