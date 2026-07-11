@@ -2,8 +2,9 @@
 import { readFile } from "node:fs/promises";
 import { inspectSvgExport } from "../core/inspectSvgExport.ts";
 import { checkSvgPath } from "../core/checkSvgPath.ts";
-import { formatDiagnosticsText, formatInspectionText } from "../diagnostics/format.ts";
-import type { CheckOptions, CheckReport } from "../types.ts";
+import { checkGeometryRequest } from "../core/checkGeometryRequest.ts";
+import { formatDiagnosticsText, formatGeometryRequestText, formatInspectionText } from "../diagnostics/format.ts";
+import type { CheckOptions, CheckReport, GeometryCheckRequest, GeometryRequestReport } from "../types.ts";
 
 interface NumberConstraints {
   integer?: boolean;
@@ -14,6 +15,11 @@ interface NumberConstraints {
 async function main(argv: string[]): Promise<number> {
   try {
     const [command, filePath, ...rest] = argv;
+
+    if (command === "check-request") {
+      return await runCheckRequest(argv.slice(1));
+    }
+
     if (!filePath || (command !== "check" && command !== "inspect")) {
       printUsage();
       return 2;
@@ -56,6 +62,103 @@ async function main(argv: string[]): Promise<number> {
     }
     return 1;
   }
+}
+
+interface CheckRequestOptions {
+  file: string | undefined;
+  json: boolean;
+}
+
+// Loomit → Seamlint handoff: a whole GeometryCheckRequest (JSON, self-contained with inline
+// geometryText) comes in via file arg or stdin, and a GeometryRequestReport goes out. This is a
+// thin wrapper over checkGeometryRequest, mirroring how `check` wraps checkSvgPath.
+async function runCheckRequest(args: string[]): Promise<number> {
+  let options: CheckRequestOptions;
+  try {
+    options = parseCheckRequestArgs(args);
+  } catch (error) {
+    emitRequestReport(requestErrorReport(errorMessage(error)), { json: wantsJson(args) });
+    return 2;
+  }
+
+  let request: GeometryCheckRequest;
+  try {
+    const input =
+      options.file && options.file !== "-" ? await readFile(options.file, "utf8") : await readStdin();
+    request = coerceRequest(JSON.parse(input));
+  } catch (error) {
+    emitRequestReport(requestErrorReport(errorMessage(error)), options);
+    return 2;
+  }
+
+  const report = checkGeometryRequest(request);
+  emitRequestReport(report, options);
+  return report.status === "error" ? 1 : 0;
+}
+
+function parseCheckRequestArgs(args: string[]): CheckRequestOptions {
+  let file: string | undefined;
+  let json = false;
+
+  for (const arg of args) {
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    if (file !== undefined) {
+      throw new Error("Expected at most one request file path.");
+    }
+    file = arg;
+  }
+
+  return { file, json };
+}
+
+function coerceRequest(value: unknown): GeometryCheckRequest {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Geometry request must be a JSON object.");
+  }
+  const candidate = value as { parts?: unknown; checks?: unknown };
+  if (!Array.isArray(candidate.parts) || !Array.isArray(candidate.checks)) {
+    throw new Error('Geometry request must have array "parts" and "checks" fields.');
+  }
+  return value as GeometryCheckRequest;
+}
+
+function requestErrorReport(message: string): GeometryRequestReport {
+  return {
+    status: "error",
+    target: "geometry-request",
+    diagnostics: [
+      {
+        severity: "error",
+        code: "cli.invalid_request_json",
+        target: "geometry-request",
+        message,
+        suggestion: ["Pass a valid Loomit GeometryCheckRequest JSON to slnt check-request via a file path or stdin."]
+      }
+    ],
+    reports: []
+  };
+}
+
+function emitRequestReport(report: GeometryRequestReport, options: { json: boolean }): void {
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log(formatGeometryRequestText(report));
+  }
+}
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function parseOptions(args: string[]): CheckOptions {
@@ -140,6 +243,7 @@ function printUsage(): void {
   console.log(`Usage:
   slnt check <svg-file> --path <path-id> [options]
   slnt inspect <svg-file> [--json]
+  slnt check-request [request.json] [--json]
 
 Options:
   --compare-to <path-id>            Compare with another path in the same SVG.
@@ -155,7 +259,11 @@ Options:
   --tangent-tolerance-deg <number>  Tangent mismatch warning threshold. Default: 8.
 
 Inspect mode:
-  --json                            Print the export inspection as JSON.`);
+  --json                            Print the export inspection as JSON.
+
+Check-request mode:
+  Reads a Loomit GeometryCheckRequest JSON (file arg, or stdin when omitted)
+  and prints a GeometryRequestReport. --json prints JSON; a text summary otherwise.`);
 }
 
 function wantsJson(argv: string[]): boolean {
