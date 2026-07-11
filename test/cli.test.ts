@@ -17,7 +17,7 @@ function runSlntWithInput(args: string[], input: string) {
   });
 }
 
-// self-contained request: 各 part が inline geometryText を持つので Seamlint は filesystem 不要。
+// 自己完結した request: 各 part が inline geometryText を持つので Seamlint は filesystem 不要。
 function sampleGeometryRequest() {
   const svg = (id: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100"><path id="${id}" d="M 0 0 L 100 0" /></svg>`;
@@ -56,7 +56,7 @@ function sampleGeometryRequest() {
 }
 
 test("rejects non-numeric threshold options", () => {
-  // Protects spec: JSON mode reports invalid CLI numeric input without NaN/null diagnostics.
+  // 仕様保護: JSON モードは、不正な CLI 数値入力を NaN/null の diagnostic なしで報告する。
   const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
@@ -86,7 +86,7 @@ test("rejects non-numeric threshold options", () => {
 });
 
 test("rejects missing numeric option values", () => {
-  // Protects spec: JSON mode reports missing numeric values instead of consuming the next flag.
+  // 仕様保護: JSON モードは、数値が欠けているとき次の flag を飲み込まず欠落として報告する。
   const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
@@ -102,7 +102,7 @@ test("rejects missing numeric option values", () => {
 });
 
 test("reports missing SVG path as JSON diagnostic", () => {
-  // Protects spec: JSON mode turns path lookup failures into structured reports.
+  // 仕様保護: JSON モードは、path 探索の失敗を構造化 report に変換する。
   const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
@@ -121,7 +121,7 @@ test("reports missing SVG path as JSON diagnostic", () => {
 });
 
 test("reports unsupported SVG commands as JSON diagnostic", () => {
-  // Protects spec: JSON mode keeps parser failures machine-readable.
+  // 仕様保護: JSON モードは、parser の失敗を機械可読なまま保つ。
   const result = runSlnt([
     "check",
     "./test/fixtures/unsupported-command.svg",
@@ -169,7 +169,7 @@ test("refuses to measure a non-unit viewBox scale", () => {
 });
 
 test("keeps text mode errors on stderr", () => {
-  // Protects spec: text mode preserves the simple CLI error behavior.
+  // 仕様保護: text モードは、単純な CLI エラー挙動をそのまま保つ。
   const result = runSlnt([
     "check",
     "./examples/armhole-kink.svg",
@@ -183,7 +183,7 @@ test("keeps text mode errors on stderr", () => {
 });
 
 test("runs smooth-join expectation checks from the CLI", () => {
-  // Protects spec: --expect-smooth runs endpoint/tangent compatibility instead of length comparison.
+  // 仕様保護: --expect-smooth は、長さ比較ではなく endpoint/tangent 互換性チェックを実行する。
   const result = runSlnt([
     "check",
     "./examples/smooth-join.svg",
@@ -203,7 +203,7 @@ test("runs smooth-join expectation checks from the CLI", () => {
 });
 
 test("runs endpoint gap checks from the CLI", () => {
-  // Protects spec: --expect-smooth reports endpoint distance before tangent alignment.
+  // 仕様保護: --expect-smooth は、tangent の整列より先に endpoint 間の距離を報告する。
   const result = runSlnt([
     "check",
     "./examples/endpoint-gap.svg",
@@ -223,7 +223,7 @@ test("runs endpoint gap checks from the CLI", () => {
 });
 
 test("reports open loops from the CLI when closed paths are required", () => {
-  // Protects spec: --closed turns an unjoined loop into a structured error diagnostic.
+  // 仕様保護: --closed は、閉じていない loop を構造化されたエラー diagnostic に変える。
   const result = runSlnt([
     "check",
     "./examples/open-loop.svg",
@@ -242,7 +242,7 @@ test("reports open loops from the CLI when closed paths are required", () => {
 });
 
 test("inspects an SVG export from the CLI", () => {
-  // Protects spec: real export verification should be runnable from the CLI before geometry measurement starts.
+  // 仕様保護: 実際の export 検証は、geometry 測定を始める前に CLI から実行できるべき。
   const result = runSlnt([
     "inspect",
     "./test/fixtures/export-inspect.svg",
@@ -266,7 +266,7 @@ test("inspects an SVG export from the CLI", () => {
 });
 
 test("prints inspect results as text when --json is omitted", () => {
-  // Protects spec: the human-readable inspect formatter is a real, exercised output path, not just --json.
+  // 仕様保護: 人間可読な inspect フォーマッタは、--json だけでなく実際に通る出力経路である。
   const result = runSlnt(["inspect", "./test/fixtures/export-inspect.svg"]);
 
   assert.equal(result.status, 1);
@@ -278,7 +278,7 @@ test("prints inspect results as text when --json is omitted", () => {
 });
 
 test("runs a Loomit geometry request from stdin (check-request)", () => {
-  // Protects spec: check-request feeds a whole self-contained request through checkGeometryRequest.
+  // 仕様保護: check-request は、自己完結した request 全体を checkGeometryRequest に通す。
   const result = runSlntWithInput(["check-request", "--json"], JSON.stringify(sampleGeometryRequest()));
 
   assert.equal(result.status, 0);
@@ -291,7 +291,7 @@ test("runs a Loomit geometry request from stdin (check-request)", () => {
 });
 
 test("reports invalid request JSON as a structured error with exit 2 (check-request)", () => {
-  // Protects spec: bad handoff input is machine-readable, not a raw crash, so Loomit can surface it.
+  // 仕様保護: 不正な handoff 入力は生の crash ではなく機械可読にして、Loomit が表示できるようにする。
   const result = runSlntWithInput(["check-request", "--json"], "{ not valid json");
 
   assert.equal(result.status, 2);
@@ -303,7 +303,7 @@ test("reports invalid request JSON as a structured error with exit 2 (check-requ
 });
 
 test("prints check-request results as text when --json is omitted", () => {
-  // Protects spec: the human-readable geometry-request summary is a real, exercised output path.
+  // 仕様保護: 人間可読な geometry-request サマリは、実際に通る出力経路である。
   const result = runSlntWithInput(["check-request"], JSON.stringify(sampleGeometryRequest()));
 
   assert.equal(result.status, 0);
@@ -313,7 +313,7 @@ test("prints check-request results as text when --json is omitted", () => {
 });
 
 test("rejects a request missing parts/checks arrays with exit 2 (check-request)", () => {
-  // Protects spec: shape validation happens before checkGeometryRequest, so malformed input is guided.
+  // 仕様保護: 形状の検証は checkGeometryRequest より前に行い、不正な入力を案内する。
   const result = runSlntWithInput(["check-request", "--json"], JSON.stringify({ parts: [] }));
 
   assert.equal(result.status, 2);
