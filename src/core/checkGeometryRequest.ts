@@ -1,5 +1,10 @@
-import { measureRangeOnPolyline } from "../geometry/vector.ts";
+import { DxfPathError, extractAstmPolylinePath } from "../geometry/dxfPath.ts";
+import { samplePath } from "../geometry/samplePath.ts";
+import { measureRangeOnPolyline, polylineLength } from "../geometry/vector.ts";
+import { checkCurveSmoothness } from "../rules/curveSmoothness.ts";
+import { checkEndpointTangentCompatibility } from "../rules/endpointTangentCompatibility.ts";
 import { checkGatheredSeamCompatibility } from "../rules/gatheredSeamCompatibility.ts";
+import { checkSeamLengthCompatibility } from "../rules/seamLengthCompatibility.ts";
 import type {
   CheckOptions,
   CheckReport,
@@ -7,20 +12,28 @@ import type {
   GeometryCheckRange,
   GeometryCheckRequest,
   GeometryCheckSpec,
+  GeometryFormat,
   GeometryMarkerRange,
   GeometryPartRef,
   GeometryRequestOptions,
   GeometryRequestReport,
   GeometryTarget,
-  GeometryTolerance
+  GeometryTolerance,
+  SampledPoint
 } from "../types.ts";
-import { checkSvgPath, pointsForPath, statusForDiagnostics } from "./checkSvgPath.ts";
+import { pointsForPath, statusForDiagnostics } from "./checkSvgPath.ts";
 
 type Sources = Record<string, string>;
+type PointsResult = { points: SampledPoint[] } | { error: CheckReport };
 
 interface ResolvedMarkerRange {
   startPosition: number;
   endPosition: number;
+}
+
+interface ResolvedGeometrySource {
+  format: GeometryFormat;
+  text: string;
 }
 
 export function checkGeometryRequest(
@@ -55,13 +68,19 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
     return fromUnitError;
   }
 
-  const svgText = sourceTextFor(fromPart, sources);
-  if (!svgText) {
+  const fromFormat = geometryFormatFor(fromPart);
+  const fromFormatError = validatePartFormat(check, fromPart, fromFormat);
+  if (fromFormatError) {
+    return fromFormatError;
+  }
+
+  const fromSource = resolveGeometrySource(fromPart, sources, fromFormat as GeometryFormat);
+  if (!fromSource) {
     return errorReport(
       check,
       targetFor(check.from),
       "geometry.source_not_loaded",
-      `Geometry source "${fromPart.geometrySource}" was not provided to Seamlint.`
+      `Geometry source "${fromPart.geometrySource}" (${fromFormat}) was not provided to Seamlint.`
     );
   }
 
@@ -76,7 +95,7 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "closed-loop") {
-    return checkSvgPath(svgText, {
+    return checkPathByFormat(fromSource, check, {
       path: fromPath,
       target: targetFor(check.from),
       closed: true,
@@ -98,13 +117,19 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
     return toUnitError;
   }
 
-  const toSvgText = sourceTextFor(toPart, sources);
-  if (!toSvgText) {
+  const toFormat = geometryFormatFor(toPart);
+  const toFormatError = validatePartFormat(check, toPart, toFormat);
+  if (toFormatError) {
+    return toFormatError;
+  }
+
+  const toSource = resolveGeometrySource(toPart, sources, toFormat as GeometryFormat);
+  if (!toSource) {
     return errorReport(
       check,
       targetFor(check.to),
       "geometry.source_not_loaded",
-      `Geometry source "${toPart.geometrySource}" was not provided to Seamlint.`
+      `Geometry source "${toPart.geometrySource}" (${toFormat}) was not provided to Seamlint.`
     );
   }
 
@@ -119,16 +144,20 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "smooth-continuation") {
-    if (toPart.geometrySource !== fromPart.geometrySource || toSvgText !== svgText) {
+    if (
+      toSource.format !== fromSource.format ||
+      toPart.geometrySource !== fromPart.geometrySource ||
+      toSource.text !== fromSource.text
+    ) {
       return errorReport(
         check,
         targetPairFor(check),
         "geometry.cross_source_check_unsupported",
-        "MVP smooth continuation checks require both targets to resolve to the same SVG source text."
+        "MVP smooth continuation checks require both targets to resolve to the same geometry source text."
       );
     }
 
-    return checkSvgPath(svgText, {
+    return checkPathByFormat(fromSource, check, {
       path: fromPath,
       compareTo: toPath,
       target: targetFor(check.from),
@@ -140,10 +169,10 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "sewn-seam" || check.kind === "eased-seam") {
-    return checkSvgPath(svgText, {
+    return checkPathByFormat(fromSource, check, {
       path: fromPath,
       compareTo: toPath,
-      compareSvgText: toSvgText,
+      compareGeometrySource: toSource,
       target: targetFor(check.from),
       compareTarget: targetFor(check.to),
       pairTarget: targetPairFor(check),
@@ -152,7 +181,7 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "gathered-seam") {
-    return checkGatheredSeam(svgText, toSvgText, check, fromPart, fromPath, toPart, toPath);
+    return checkGatheredSeam(fromSource, toSource, check, fromPart, fromPath, toPart, toPath);
   }
 
   return errorReport(
@@ -164,8 +193,8 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
 }
 
 function checkGatheredSeam(
-  fromSvgText: string,
-  toSvgText: string,
+  fromSource: ResolvedGeometrySource,
+  toSource: ResolvedGeometrySource,
   check: GeometryCheckSpec,
   fromPart: GeometryPartRef,
   fromPath: string,
@@ -191,10 +220,30 @@ function checkGatheredSeam(
     return toRange.error;
   }
 
-  const fromPoints = pointsForPath(fromSvgText, fromPath, toleranceOptions(check));
-  const toPoints = pointsForPath(toSvgText, toPath, toleranceOptions(check));
-  const measuredFromRange = measureRangeOnPolyline(fromPoints, fromRange.startPosition, fromRange.endPosition);
-  const measuredToRange = measureRangeOnPolyline(toPoints, toRange.startPosition, toRange.endPosition);
+  const fromPointsResult = resolvePointsForPathByFormat(
+    fromSource,
+    check,
+    fromPath,
+    targetFor(check.from),
+    toleranceOptions(check)
+  );
+  if ("error" in fromPointsResult) {
+    return fromPointsResult.error;
+  }
+
+  const toPointsResult = resolvePointsForPathByFormat(
+    toSource,
+    check,
+    toPath,
+    targetFor(check.to!),
+    toleranceOptions(check)
+  );
+  if ("error" in toPointsResult) {
+    return toPointsResult.error;
+  }
+
+  const measuredFromRange = measureRangeOnPolyline(fromPointsResult.points, fromRange.startPosition, fromRange.endPosition);
+  const measuredToRange = measureRangeOnPolyline(toPointsResult.points, toRange.startPosition, toRange.endPosition);
 
   if (!measuredFromRange || !measuredToRange || measuredFromRange.crossesSubpathBreak || measuredToRange.crossesSubpathBreak) {
     return errorReport(
@@ -232,8 +281,197 @@ function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRef): Che
   return null;
 }
 
-function sourceTextFor(part: GeometryPartRef, sources: Sources): string | undefined {
-  return part.svgText ?? part.geometryText ?? sources[part.geometrySource];
+function validatePartFormat(check: GeometryCheckSpec, part: GeometryPartRef, format: string): CheckReport | null {
+  if (format === "svg" || format === "dxf") {
+    return null;
+  }
+
+  return formatErrorReport(
+    check,
+    part.partId,
+    `Geometry part "${part.partId}" uses unsupported format "${format}".`,
+    format
+  );
+}
+
+function resolveGeometrySource(part: GeometryPartRef, sources: Sources, format: GeometryFormat): ResolvedGeometrySource | null {
+  const text = part.geometryText ?? part.svgText ?? sources[part.geometrySource];
+  if (!text) {
+    return null;
+  }
+
+  return {
+    format,
+    text
+  };
+}
+
+function geometryFormatFor(part: GeometryPartRef): string {
+  return part.format ?? "svg";
+}
+
+function checkPathByFormat(source: ResolvedGeometrySource, check: GeometryCheckSpec, options: CheckOptions): CheckReport {
+  const target = options.target ?? options.path ?? "path";
+  const fromResult = resolvePointsForPathByFormat(source, check, options.path ?? "", target, options);
+  if ("error" in fromResult) {
+    return fromResult.error;
+  }
+
+  const diagnostics = checkCurveSmoothness(fromResult.points, {
+    target,
+    expectClosed: options.closed,
+    angleThresholdDeg: options.angleThresholdDeg
+  });
+
+  if (options.compareTo) {
+    const compareSource = options.compareGeometrySource
+      ? options.compareGeometrySource
+      : options.compareSvgText
+        ? { format: source.format, text: options.compareSvgText }
+        : source;
+    const compareTarget = options.compareTarget ?? options.compareTo;
+    const pairTarget = options.pairTarget ?? `${target}/${compareTarget}`;
+    const toResult = resolvePointsForPathByFormat(compareSource, check, options.compareTo, compareTarget, options);
+    if ("error" in toResult) {
+      return toResult.error;
+    }
+
+    if (options.expectSmooth) {
+      diagnostics.push(
+        ...checkEndpointTangentCompatibility(fromResult.points, toResult.points, {
+          target: pairTarget,
+          endpointToleranceMm: options.endpointToleranceMm,
+          tangentToleranceDeg: options.tangentToleranceDeg
+        })
+      );
+    } else {
+      diagnostics.push(
+        ...checkSeamLengthCompatibility(fromResult.points, toResult.points, {
+          target: pairTarget,
+          toleranceMm: options.lengthToleranceMm,
+          easeRatioRange: options.easeRatioRange
+        })
+      );
+    }
+  }
+
+  return {
+    status: statusForDiagnostics(diagnostics),
+    target: options.compareTo
+      ? options.pairTarget ?? `${target}/${options.compareTarget ?? options.compareTo}`
+      : target,
+    lengthMm: round(polylineLength(fromResult.points)),
+    diagnostics
+  };
+}
+
+function resolvePointsForPathByFormat(
+  source: ResolvedGeometrySource,
+  check: GeometryCheckSpec,
+  pathId: string,
+  target: string,
+  options: Partial<CheckOptions>
+): PointsResult {
+  try {
+    return { points: pointsForPathByFormat(source, pathId, options) };
+  } catch (error) {
+    return { error: geometryPathErrorReport(check, target, source, pathId, error) };
+  }
+}
+
+function pointsForPathByFormat(source: ResolvedGeometrySource, pathId: string, options: Partial<CheckOptions>): SampledPoint[] {
+  switch (source.format) {
+    case "svg":
+      return pointsForPath(source.text, pathId, options);
+    case "dxf": {
+      const commands = extractAstmPolylinePath(source.text, pathId);
+      return samplePath(commands, {
+        curveSteps: options.curveSteps,
+        curveSpacingMm: options.curveSpacingMm
+      });
+    }
+  }
+}
+
+function geometryPathErrorReport(
+  check: GeometryCheckSpec,
+  target: string,
+  source: ResolvedGeometrySource,
+  pathId: string,
+  error: unknown
+): CheckReport {
+  const diagnostic = geometryPathErrorDiagnostic(check, target, source, pathId, error);
+  return {
+    status: "error",
+    target,
+    lengthMm: null,
+    diagnostics: [diagnostic]
+  };
+}
+
+function geometryPathErrorDiagnostic(
+  check: GeometryCheckSpec,
+  target: string,
+  source: ResolvedGeometrySource,
+  pathId: string,
+  error: unknown
+): Diagnostic {
+  if (error instanceof DxfPathError) {
+    return {
+      severity: "error",
+      code: error.code,
+      target,
+      message: error.message,
+      expected: error.expected ?? { checkId: check.id, kind: check.kind, format: source.format, pathId },
+      actual: error.actual ?? { target, format: source.format, pathId }
+    };
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    severity: "error",
+    code: source.format === "svg" ? svgPathErrorCode(message) : "geometry.invalid_dxf_path",
+    target,
+    message,
+    expected: { checkId: check.id, kind: check.kind, format: source.format, pathId },
+    actual: { target, format: source.format, pathId }
+  };
+}
+
+function svgPathErrorCode(message: string): string {
+  if (message.startsWith("Could not find <path id=")) {
+    return "geometry.path_not_found";
+  }
+  if (message.startsWith("Unsupported SVG transform")) {
+    return "geometry.unsupported_transform";
+  }
+  if (message.startsWith("Unsupported non-unit viewBox scale")) {
+    return "geometry.unsupported_viewbox_scale";
+  }
+  if (message.startsWith("Unsupported SVG path command:")) {
+    return "geometry.unsupported_svg_command";
+  }
+  return "geometry.invalid_svg_path";
+}
+
+function formatErrorReport(check: GeometryCheckSpec, target: string, message: string, format: string): CheckReport {
+  const diagnostics: Diagnostic[] = [
+    {
+      severity: "error",
+      code: "geometry.unsupported_format",
+      target,
+      message,
+      expected: { checkId: check.id, kind: check.kind, supportedFormats: ["svg", "dxf"] },
+      actual: { target, format }
+    }
+  ];
+
+  return {
+    status: "error",
+    target,
+    lengthMm: null,
+    diagnostics
+  };
 }
 
 function pathIdFor(part: GeometryPartRef, pathRef: string): string {
@@ -307,12 +545,7 @@ function normalizeRatioRange(value: readonly [number, number] | undefined): read
   }
 
   const [minRatio, maxRatio] = value;
-  if (
-    !Number.isFinite(minRatio) ||
-    !Number.isFinite(maxRatio) ||
-    minRatio < 0 ||
-    maxRatio < minRatio
-  ) {
+  if (!Number.isFinite(minRatio) || !Number.isFinite(maxRatio) || minRatio < 0 || maxRatio < minRatio) {
     return undefined;
   }
 

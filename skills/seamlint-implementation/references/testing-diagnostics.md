@@ -79,9 +79,11 @@ CLI 表示の都合だけで field を rename しない。display-only な変更
 - `geometry.missing_check_target`
 - `geometry.invalid_tolerance`
 - `geometry.cross_source_check_unsupported`
+- `geometry.unsupported_format`
 - `geometry.unsupported_check_kind`
 - `geometry.unsupported_unit`
 - `geometry.unsupported_scale`
+- `geometry.invalid_dxf_path`
 - `input.file_not_found`
 - `input.file_permission_denied`
 - `cli.invalid_arguments`
