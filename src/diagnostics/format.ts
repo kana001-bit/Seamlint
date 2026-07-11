@@ -1,5 +1,5 @@
 import type { SvgExportInspectionReport } from "../core/inspectSvgExport.ts";
-import type { CheckReport } from "../types.ts";
+import type { CheckReport, GeometryRequestReport } from "../types.ts";
 
 export function formatDiagnosticsText(result: CheckReport): string {
   const lines: string[] = [];
@@ -26,6 +26,19 @@ export function formatDiagnosticsText(result: CheckReport): string {
     if (diagnostic.suggestion?.length) {
       lines.push(`  suggestion: ${diagnostic.suggestion.join(" ")}`);
     }
+  }
+
+  return lines.join("\n");
+}
+
+export function formatGeometryRequestText(report: GeometryRequestReport): string {
+  const lines: string[] = [];
+  lines.push(`Seamlint geometry-request: ${report.status}`);
+  lines.push(`Checks: ${report.reports.length}`);
+
+  for (const checkReport of report.reports) {
+    lines.push("");
+    lines.push(formatDiagnosticsText(checkReport));
   }
 
   return lines.join("\n");
