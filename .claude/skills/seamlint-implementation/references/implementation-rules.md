@@ -77,14 +77,22 @@ Seamlint の計測値は物理寸法として下流に流れます。座標系�
   対応する fixture (非等倍 viewBox / transform 付き path) で silent に通らないことを test
   してから広げる。
 
-## SVG Input Scope
+## Input Scope（SVG と DXF）
 
-MVP parser は `M`、`L`、`H`、`V`、`C`、`Q`、`Z` をサポートします。
+geometry source は SVG と ASTM DXF の 2 系統です。
 
-- unsupported command の error は明示する。
+SVG:
+
+- MVP parser は `M`、`L`、`H`、`V`、`C`、`Q`、`Z` をサポートする（`src/geometry/svgPath.ts`）。
+- unsupported command の error は明示する（`geometry.unsupported_svg_command`）。
 - command を追加したら、user-facing docs と example または focused test を更新する。
 - unsupported command を黙って無視しない。
 - 現在の `extractPathDataById` helper は narrow MVP reader であり、full XML parser ではない。SVG selection が複雑になるなら、real parser を使うか制限を docs に書く。
+
+ASTM DXF:
+
+- DXF path は `src/geometry/dxfPath.ts` で読む。読めない DXF path は `geometry.invalid_dxf_path`、未対応フォーマットは `geometry.unsupported_format` で明示する。
+- SVG と DXF で同じ幾何を測るとき、diagnostic の `code` / 意味は source をまたいで一貫させる。source 固有の穴（例: cross-source 比較）は黙って通さず error にする（`geometry.cross_source_check_unsupported`）。
 
 ## Dependencies
 
@@ -114,6 +122,6 @@ Seamlint は standalone CLI としても、将来の Loomit geometry rule pack �
 docs と implementation が食い違う場合:
 
 1. `README.md` と current source を、動いている MVP の最良の説明として扱う。
-2. `docs/coding-guidelines.md` を implementation policy として扱う。
-3. Loomit integration docs は future boundary の design intent として扱う。
+2. `docs/development.md` の「守る基準」と `docs/architecture.md` の責務境界を implementation policy として扱う。
+3. `docs/loomit-integration.md` は future boundary の design intent として扱う。
 4. product scope を変えるなら、code と同時か先に docs を更新する。

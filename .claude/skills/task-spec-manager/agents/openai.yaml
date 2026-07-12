@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seamlint Task Spec Manager"
+  short_description: "長期タスクの確定/未確認を docs/task-specs に証拠付きで永続化する。"
+  default_prompt: "$task-spec-manager を使って、複数セッションにまたがる Seamlint タスクの確定仕様・未確認事項・引き継ぎを docs/task-specs/<slug>/task-spec.md に整理する。"
