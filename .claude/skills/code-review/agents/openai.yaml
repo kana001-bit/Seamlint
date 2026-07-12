@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seamlint Code Review"
+  short_description: "Seamlint の差分/PR を geometry linter として安全かレビューする。"
+  default_prompt: "$code-review を使って、Seamlint の作業差分または PR を critical invariants（confidently-wrong 計測・false positive・severity・contract・read-only）の観点でレビューする。"
