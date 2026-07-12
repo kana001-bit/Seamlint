@@ -66,7 +66,7 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
   - rule を足すときは「鳴るべき fixture」と「鳴ってはいけない fixture」の両方で証明する。
   - `intentional-corner` / `join_kind` によるルール適用ガードを入れるまで、
     smoothness 系を無条件に全 path へ回さない (特に `sewn-seam` / `eased-seam` に
-    接線チェックを回すのは category error。docs/seamlint-open-questions.md の E, G 参照)。
+    接線チェックを回すのは category error)。
 - 検証: `npm run check:sample` 系を実行し、意図した geometry で不要な warning が
   増えていないかを毎回確認する。
 
