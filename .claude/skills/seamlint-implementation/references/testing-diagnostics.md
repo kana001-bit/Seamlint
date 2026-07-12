@@ -103,26 +103,19 @@ target conventions:
 
 ## Test and Example Expectations
 
-現在の project には sample scripts はありますが、test runner はまだありません。test runner が入るまでは sample command で挙動を確認します。
+test runner は `node:test` で導入済みです（`test/*.test.ts`、`npm test` が typecheck + build の後に
+`node --test` を回す）。挙動は test と sample command の両方で確認できます。
 
 ```sh
-npm run check:sample
-npm run check:sample-json
-node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole --compare-to sleeve-cap
+npm test                    # typecheck + build + node --test
+node --test                 # test だけを直接叩く
+npm run check:sample        # armhole-kink.svg の curve kink（手読み確認）
+npm run check:sample-json   # 同上（JSON）
 ```
 
-test runner を追加するなら、まず `node:test` を優先します。各 test には守っている behavior を短く書くコメントを入れます。
-
-```js
-test("reports seam length mismatch", () => {
-  // Protects spec: seams whose sampled lengths differ beyond tolerance return a warning diagnostic.
-});
-```
-
-flag や alternate behavior では、両方の意味を test します。
-
-- enabled behavior。例: `--expect-smooth`
-- default behavior。例: `--expect-smooth` がないときは seam length comparison
+diagnostic / rule semantics を変えたときに何を test するか（配置・冒頭コメント様式・
+「鳴るべき／鳴ってはいけない fixture」の作り方）は `test-writing` skill を読む。ここでは
+diagnostic の shape・code・severity 契約だけを扱う。
 
 ## CLI Output Compatibility
 

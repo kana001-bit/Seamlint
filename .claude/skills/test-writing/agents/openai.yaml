@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seamlint Test Writing"
+  short_description: "Seamlint の node:test テストと fixture を Seamlint の作法で追加・更新する。"
+  default_prompt: "$test-writing を使って、Seamlint の rule / diagnostic 変更を test/ の node:test テストと fixture で固定する（鳴るべき・鳴ってはいけない両方）。"
