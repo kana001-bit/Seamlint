@@ -70,6 +70,9 @@ export interface CheckOptions {
 export type JoinKind =
   | "smooth-continuation"
   | "sewn-seam"
+  // seam-edge: path_ref が指す BLOCK 全体（外周）ではなく、宣言ペアが実際に縫い合う「共有辺」を
+  // structuralEdges で発見して長さを測る。Loomit は「どの2パーツが縫うか」だけ宣言し、辺の発見は Seamlint。
+  | "seam-edge"
   | "closed-loop"
   | "overlap"
   | "intentional-corner"
@@ -117,6 +120,12 @@ export interface GeometryTolerance {
   gather_ratio?: readonly [number, number];
 }
 
+// seam-edge の per-connector 識別子。connector が宣言する「その seam の合印(notch)数」を運ぶ。
+// 同じ2 BLOCK を指す複数 connector を、辺ごとの notch 署名で区別するために使う（幾何ではなく宣言データ）。
+export interface GeometryEdgeSignature {
+  notchCount?: number;
+}
+
 export interface GeometryCheckSpec {
   id: string;
   kind: JoinKind;
@@ -124,6 +133,7 @@ export interface GeometryCheckSpec {
   to?: GeometryTarget;
   tolerance?: GeometryTolerance;
   range?: GeometryCheckRange;
+  edgeSignature?: GeometryEdgeSignature;
 }
 
 export type GeometryFormat = "svg" | "dxf";
