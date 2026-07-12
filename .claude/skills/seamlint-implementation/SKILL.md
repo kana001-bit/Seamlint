@@ -1,21 +1,24 @@
 ---
 name: seamlint-implementation
-description: "Seamlint の実装変更で使う project skill。AGENTS.md は薄く保ち、geometry・diagnostics・CLI・tests・docs・Loomit 境界の実務ルールはここから必要な reference だけ読む。"
+description: "Seamlint 本体（geometry parser・sampler・rules・core・diagnostics・CLI・Loomit 境界）を変更するときに使う。変更対象に応じて必要な reference だけ読む。テストの配置・作法だけなら test-writing、差分/PR レビューは code-review、長期タスクの仕様整理は task-spec-manager を使う（ここには含めない）。"
 ---
 
 # Seamlint Implementation
 
-Seamlint の実装作業で使う skill です。`AGENTS.md` は入口だけにして、実装時の guardrail は
-ここから必要な reference だけ読む形にします。
+Seamlint 本体の実装作業で使う skill です。`AGENTS.md` は入口だけにして、実装時の guardrail は
+ここから必要な reference だけ読む形にします。テストを書くこと自体が主目的なら `test-writing` へ、
+差分のレビューなら `code-review` へ回します。
 
 ## まず切り分ける
 
-変更対象を先に分類します。主な区分は parser / sampler / vector math / rule / core /
-diagnostic / CLI / examples/tests / docs / Loomit boundary です。
+変更対象を先に分類します。主な区分は parser（SVG / ASTM DXF）/ sampler / vector math /
+rule / core / diagnostic / CLI / examples / docs / Loomit boundary です。
 
 ## 読むもの
 
 必ず全部読む必要はありません。変更対象に応じて必要なものだけ読みます。
+
+skill 内の reference（詳細ガードの正本）:
 
 - `references/critical-invariants.md`
   - geometry / sampling / diagnostic / severity / unit assumption を触る前に読む。
@@ -23,14 +26,23 @@ diagnostic / CLI / examples/tests / docs / Loomit boundary です。
 - `references/implementation-rules.md`
   - parser / sampler / core / rules / CLI boundary / dependencies / Loomit integration を触るときに読む。
 - `references/testing-diagnostics.md`
-  - diagnostic shape、code、severity、CLI JSON、examples、tests を触るときに読む。
+  - diagnostic shape、code、severity、CLI JSON を触るときに読む。テストの書き方そのものは `test-writing` skill を見る。
+
+リポジトリ本体のガイド（複製せずパスで参照する）:
+
 - `README.md`
   - 現在の MVP、CLI usage、sample command を確認したいときに読む。
-- `docs/coding-guidelines.md`
-  - module boundary や implementation style を確認したいときに読む。
-- `docs/seamlint-mvp-and-loomit-integration.md`
-  - Loomit との境界や contract を変えるときに読む。
-- `docs/seamlint-project-overview.md`
+- `docs/architecture.md`
+  - core / rules / CLI / diagnostics の責務境界とデータモデルを確認したいときに読む。
+- `docs/development.md`
+  - build / test / sample command と「守る基準」（implementation policy）を確認したいときに読む。
+- `docs/svg-compatibility.md`
+  - 座標前提・対応コマンド・明示的に reject する入力を確認したいときに読む。
+- `docs/diagnostics.md`
+  - diagnostic `code` / `severity` / 意味の一覧（下流 contract）を確認したいときに読む。
+- `docs/loomit-integration.md`
+  - Loomit との境界や `GeometryCheckRequest` 契約を変えるときに読む。
+- `docs/core-concepts.md` / `docs/why.md`
   - product scope や non-goals を変えるときに読む。
 
 文字化けした古い日本語 docs がある場合は、`README.md`、現在のソースコード、読める ASCII
