@@ -2,6 +2,8 @@ import { DxfPathError, extractAstmPolylinePath } from "../geometry/dxfPath.ts";
 import { samplePath } from "../geometry/samplePath.ts";
 import { matchSharedEdge } from "../geometry/sharedEdgeSeam.ts";
 import type { SharedEdgeCandidate, SharedEdgeMatchResult } from "../geometry/sharedEdgeSeam.ts";
+import { matchBandSubrange } from "../geometry/bandSubrangeSeam.ts";
+import type { BandNeighbour, BandSubrangeMatchResult, BandSubrangeMeasure } from "../geometry/bandSubrangeSeam.ts";
 import { structuralEdges } from "../geometry/structuralEdges.ts";
 import type { StructuralEdge, StructuralEdgesResult } from "../geometry/structuralEdges.ts";
 import { measureRangeOnPolyline, polylineLength } from "../geometry/vector.ts";
@@ -105,6 +107,11 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
       closed: true,
       ...toleranceOptions(check)
     });
+  }
+
+  // band-seam は from=バンド、neighbours=隣接ピース群で、`to` を使わない（N-ary）。`to` 必須ガードの前に分岐する。
+  if (check.kind === "band-seam") {
+    return checkBandSeam(request, check, fromSource, fromPath, sources);
   }
 
   if (!check.to) {
@@ -453,6 +460,323 @@ function lengthAsPolyline(lengthMm: number): SampledPoint[] {
   ];
 }
 
+// band-seam の証跡: 各 neighbour について、どの辺をバンド接辺とみなし、その finished 長と裁断枚数を測ったか。
+interface BandNeighbourTrace {
+  partId: string;
+  edgeId: number;
+  finishedLengthMm: number;
+  cutQuantity: number;
+}
+
+// band-seam: from=バンド、neighbours=そのバンドに縫い付く隣接ピース群。1辺=1辺ではなく「バンド総周長 ≈
+// Σ(隣接ピースの仕上がり辺 × 裁断枚数) + closure」で照合する。バンド接辺は Loomit が辺を渡さない方針なので、
+// 各 neighbour の dart 畳み辺（fitted band は dart で成形＝唯一の darted 辺が waist）を Seamlint が幾何から
+// 選ぶ。裁断枚数は layer-1 "Cut N"。DXF 専用（structuralEdges が辺分割を要する）。
+function checkBandSeam(
+  request: GeometryCheckRequest,
+  check: GeometryCheckSpec,
+  bandSource: ResolvedGeometrySource,
+  bandPath: string,
+  sources: Sources
+): CheckReport {
+  const target = bandSeamTarget(check);
+
+  if (bandSource.format !== "dxf") {
+    return errorReport(
+      check,
+      target,
+      "geometry.band_seam_requires_dxf",
+      `Band-seam check "${check.id}" needs DXF geometry on the band to split its edges (got ${bandSource.format}).`
+    );
+  }
+
+  const neighbourTargets = check.neighbours ?? [];
+  if (neighbourTargets.length === 0) {
+    return errorReport(
+      check,
+      target,
+      "geometry.band_neighbours_missing",
+      `Band-seam check "${check.id}" declares no neighbours, so there is nothing to sum against the band.`
+    );
+  }
+
+  let bandResult: StructuralEdgesResult;
+  try {
+    bandResult = structuralEdges(bandSource.text, bandPath);
+  } catch (error) {
+    return geometryPathErrorReport(check, targetFor(check.from), bandSource, bandPath, error);
+  }
+  // 裁断枚数（"Cut N"）が無い/非正なら総周長を出せない。黙って ×1 と仮定せず error にする（check 不能）。
+  if (bandResult.cutQuantity === null || !(bandResult.cutQuantity > 0)) {
+    return errorReport(
+      check,
+      target,
+      "geometry.band_cut_quantity_missing",
+      `Band-seam check "${check.id}" could not read a positive "Cut N" quantity for the band "${check.from.partId}".`
+    );
+  }
+
+  // 各 neighbour を解決し、dart 畳み辺（＝バンド接辺）の finished 長と裁断枚数を集める。
+  const neighbours: BandNeighbour[] = [];
+  const neighbourTrace: BandNeighbourTrace[] = [];
+  for (const neighbourTarget of neighbourTargets) {
+    const resolved = resolveNeighbourGeometry(request, check, neighbourTarget, sources);
+    if ("error" in resolved) {
+      return resolved.error;
+    }
+    if (resolved.source.format !== "dxf") {
+      return errorReport(
+        check,
+        target,
+        "geometry.band_seam_requires_dxf",
+        `Band-seam check "${check.id}" needs DXF geometry on neighbour "${neighbourTarget.partId}" (got ${resolved.source.format}).`
+      );
+    }
+
+    let neighbourResult: StructuralEdgesResult;
+    try {
+      neighbourResult = structuralEdges(resolved.source.text, resolved.pathId);
+    } catch (error) {
+      return geometryPathErrorReport(check, targetFor(neighbourTarget), resolved.source, resolved.pathId, error);
+    }
+    if (neighbourResult.cutQuantity === null || !(neighbourResult.cutQuantity > 0)) {
+      return errorReport(
+        check,
+        target,
+        "geometry.band_cut_quantity_missing",
+        `Band-seam check "${check.id}" could not read a positive "Cut N" quantity for neighbour "${neighbourTarget.partId}".`
+      );
+    }
+
+    // fitted band の接辺は dart で成形された waist。dart 畳み辺がちょうど1本ならそれを接辺とする。0本（識別不能）
+    // または複数本（どれが waist か決められない）なら、黙って推測せず理由付きで error にする（confidently-wrong 回避）。
+    const dartedEdges = neighbourResult.edges.filter((edge) => edge.darts.length > 0);
+    if (dartedEdges.length !== 1) {
+      return {
+        status: "error",
+        target,
+        lengthMm: null,
+        diagnostics: [
+          {
+            severity: "error",
+            code: "geometry.band_neighbour_edge_unresolved",
+            target,
+            message: `Band-seam check "${check.id}" could not uniquely identify the band-touching edge on neighbour "${neighbourTarget.partId}": found ${dartedEdges.length} dart-collapsed edges (expected exactly 1).`,
+            expected: { checkId: check.id, kind: check.kind },
+            actual: { partId: neighbourTarget.partId, dartedEdgeCount: dartedEdges.length }
+          }
+        ]
+      };
+    }
+
+    const bandEdge = dartedEdges[0];
+    neighbours.push({ finishedLengthMm: bandEdge.finishedLengthMm, cutQuantity: neighbourResult.cutQuantity });
+    neighbourTrace.push({
+      partId: neighbourTarget.partId,
+      edgeId: bandEdge.edgeId,
+      finishedLengthMm: round(bandEdge.finishedLengthMm),
+      cutQuantity: neighbourResult.cutQuantity
+    });
+  }
+
+  const closureRatio = bandClosureRatio(check);
+  const match = matchBandSubrange(
+    { edges: bandResult.edges, cutQuantity: bandResult.cutQuantity },
+    neighbours,
+    closureRatio === undefined ? {} : { closureToleranceRatio: closureRatio }
+  );
+
+  if (!match.ok) {
+    return bandSeamFailureReport(check, target, match, neighbourTrace);
+  }
+
+  const diagnostics: Diagnostic[] = [bandSeamMatchedDiagnostic(target, match, neighbourTrace)];
+  return {
+    status: statusForDiagnostics(diagnostics),
+    target,
+    lengthMm: round(match.bandTotalMm),
+    diagnostics
+  };
+}
+
+interface ResolvedNeighbourGeometry {
+  source: ResolvedGeometrySource;
+  pathId: string;
+}
+
+// neighbour target を part / source / path へ解決する（from の解決と同じ検査: part 存在・mm/scale・format・source
+// ・pathRef）。失敗はその場の error report で返す。band-seam の各 neighbour で使う。
+function resolveNeighbourGeometry(
+  request: GeometryCheckRequest,
+  check: GeometryCheckSpec,
+  neighbourTarget: GeometryTarget,
+  sources: Sources
+): ResolvedNeighbourGeometry | { error: CheckReport } {
+  const part = findPart(request, neighbourTarget.partId);
+  if (!part) {
+    return {
+      error: errorReport(check, targetFor(neighbourTarget), "geometry.part_not_found", `Geometry part "${neighbourTarget.partId}" was not found.`)
+    };
+  }
+
+  const unitError = validatePartUnits(check, part);
+  if (unitError) {
+    return { error: unitError };
+  }
+
+  const format = geometryFormatFor(part);
+  const formatError = validatePartFormat(check, part, format);
+  if (formatError) {
+    return { error: formatError };
+  }
+
+  const source = resolveGeometrySource(part, sources, format as GeometryFormat);
+  if (!source) {
+    return {
+      error: errorReport(
+        check,
+        targetFor(neighbourTarget),
+        "geometry.source_not_loaded",
+        `Geometry source "${part.geometrySource}" (${format}) was not provided to Seamlint.`
+      )
+    };
+  }
+
+  const pathId = pathIdFor(part, neighbourTarget.pathRef);
+  if (!pathId) {
+    return {
+      error: errorReport(
+        check,
+        targetFor(neighbourTarget),
+        "geometry.path_ref_not_found",
+        `Path reference "${neighbourTarget.pathRef}" was not found on part "${part.partId}".`
+      )
+    };
+  }
+
+  return { source, pathId };
+}
+
+// バンドと隣接合計が reconcile したことを示す info 診断。測った証跡（バンド長辺・総周長・合計・closure）と、
+// 各 neighbour のどの辺を接辺とみなしたかを actual に載せる。info なので status は上げない。
+function bandSeamMatchedDiagnostic(
+  target: string,
+  measure: BandSubrangeMeasure,
+  neighbours: BandNeighbourTrace[]
+): Diagnostic {
+  return {
+    severity: "info",
+    code: "geometry.band_seam_matched",
+    target,
+    message: "Reconciled the band circumference against the sum of its neighbours' finished edges × cut quantity.",
+    actual: {
+      bandEdgeId: measure.bandEdgeId,
+      bandLengthMm: round(measure.bandLengthMm),
+      bandCutQuantity: measure.bandCutQuantity,
+      bandTotalMm: round(measure.bandTotalMm),
+      sumMm: round(measure.sumMm),
+      closureMm: round(measure.closureMm),
+      closurePct: round(measure.closurePct),
+      neighbours
+    }
+  };
+}
+
+// reconcile に失敗した band-seam を report にする。sum-mismatch は曖昧な design issue（gather/tuck か集合違い）
+// なので warning、退化/check 不能は error。計測できていれば measure を証跡に載せる。
+function bandSeamFailureReport(
+  check: GeometryCheckSpec,
+  target: string,
+  failure: Extract<BandSubrangeMatchResult, { ok: false }>,
+  neighbours: BandNeighbourTrace[]
+): CheckReport {
+  const detail = bandSeamFailureDetail(failure.reason);
+  const actual: Record<string, unknown> = { neighbours };
+  if (failure.measure) {
+    actual.bandTotalMm = round(failure.measure.bandTotalMm);
+    actual.sumMm = round(failure.measure.sumMm);
+    actual.closureMm = round(failure.measure.closureMm);
+    actual.closurePct = round(failure.measure.closurePct);
+  }
+
+  const diagnostic: Diagnostic = {
+    severity: detail.severity,
+    code: detail.code,
+    target,
+    message: `Band-seam check "${check.id}" ${detail.message}`,
+    expected: { checkId: check.id, kind: check.kind },
+    actual,
+    suggestion: detail.suggestion
+  };
+
+  return {
+    status: statusForDiagnostics([diagnostic]),
+    target,
+    lengthMm: failure.measure ? round(failure.measure.bandTotalMm) : null,
+    diagnostics: [diagnostic]
+  };
+}
+
+function bandSeamFailureDetail(reason: Extract<BandSubrangeMatchResult, { ok: false }>["reason"]): {
+  code: string;
+  severity: "warning" | "error";
+  message: string;
+  suggestion: string[];
+} {
+  switch (reason) {
+    case "sum-mismatch":
+      return {
+        code: "geometry.band_seam_sum_mismatch",
+        severity: "warning",
+        message:
+          "found that the band circumference does not reconcile with the sum of its neighbours' finished edges within the closure tolerance, so this band may be gathered/tucked or the neighbour set is wrong.",
+        suggestion: [
+          "Confirm the neighbour set and each piece's cut quantity, or widen closureRatio if this band carries intentional ease."
+        ]
+      };
+    case "no-band-edge":
+      return {
+        code: "geometry.band_seam_no_band_edge",
+        severity: "error",
+        message: "found no positive-length edge on the band to use as its circumference.",
+        suggestion: ["Check that the band exports a closed layer-14 net line with a real long edge."]
+      };
+    case "degenerate-band-cut":
+      return {
+        code: "geometry.band_cut_quantity_missing",
+        severity: "error",
+        message: "read a non-positive cut quantity for the band, so the band total could not be computed.",
+        suggestion: ['Check the band\'s layer-1 "Cut N" annotation.']
+      };
+    case "no-neighbours":
+      return {
+        code: "geometry.band_neighbours_missing",
+        severity: "error",
+        message: "was given no neighbours to sum against the band.",
+        suggestion: ["Declare the pieces that sew onto this band."]
+      };
+    case "degenerate-neighbour":
+      return {
+        code: "geometry.band_neighbour_degenerate",
+        severity: "error",
+        message: "found a neighbour with a non-positive finished length or cut quantity, so the sum cannot be trusted.",
+        suggestion: ['Check each neighbour\'s band edge and its layer-1 "Cut N" quantity.']
+      };
+  }
+}
+
+// band-seam の target: バンド側と neighbours を "/" で連結する（single path は path id、pair は from/to の N-ary 拡張）。
+function bandSeamTarget(check: GeometryCheckSpec): string {
+  const band = targetFor(check.from);
+  const neighbours = (check.neighbours ?? []).map(targetFor);
+  return neighbours.length === 0 ? band : `${band}/${neighbours.join("/")}`;
+}
+
+// band-seam の closure 許容（camelCase / snake_case）。未指定なら matcher 既定（6%）に委ねる。
+function bandClosureRatio(check: GeometryCheckSpec): number | undefined {
+  return check.tolerance?.closureRatio ?? check.tolerance?.closure_ratio;
+}
+
 function findPart(request: GeometryCheckRequest, partId: string): GeometryPartRef | undefined {
   return request.parts.find((part) => part.partId === partId);
 }
@@ -711,6 +1035,21 @@ function validateTolerance(check: GeometryCheckSpec): CheckReport | null {
       targetPairFor(check),
       "geometry.invalid_tolerance",
       `Check "${check.id}" has an invalid gatherRatio range; expected [min, max] with 1 <= min <= max.`
+    );
+  }
+
+  // band-seam の closureRatio は単一の比（>= 0）。不正値のまま matchBandSubrange に渡すと RangeError を投げるので、
+  // ここで宣言検査して invalid_tolerance の error report に倒す（他 kind と同じ入口で弾く）。
+  if (check.kind === "band-seam") {
+    const raw = bandClosureRatio(check);
+    if (raw === undefined || (Number.isFinite(raw) && raw >= 0)) {
+      return null;
+    }
+    return errorReport(
+      check,
+      bandSeamTarget(check),
+      "geometry.invalid_tolerance",
+      `Check "${check.id}" has an invalid closureRatio; expected a finite number >= 0.`
     );
   }
 
