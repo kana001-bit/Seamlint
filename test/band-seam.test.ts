@@ -155,18 +155,37 @@ test("band-seam warns with sum-mismatch when the band is far longer than its nei
 
 // ---- error 分岐（check 不能は黙って通さず error）----
 
-test("band-seam errors when a neighbour has no uniquely darted band edge", () => {
-  // 仕様保護（confidently-wrong 回避）: 接辺は dart 畳み辺で選ぶ。dart 辺が 0 本（or 複数）なら「どれが接辺か」決められない。
-  // 平矩形の neighbour（dart 0）は band_neighbour_edge_unresolved で surface する（黙って最長辺などを推測しない）。
+test("band-seam errors when a neighbour has no uniquely darted band edge, pointing target at the culprit", () => {
+  // 仕様保護（confidently-wrong 回避 + P2 contract）: 接辺は dart 畳み辺で選ぶ。dart 辺が 0 本（or 複数）なら
+  // 「どれが接辺か」決められないので band_neighbour_edge_unresolved で surface する。有効な front と平矩形の flat
+  // (dart 0) を混ぜ、target が集約でも "front" でもなく **犯人の "flat.seam"** を機械可読に指すことを固定する。
   const band: BandPart = { partId: "band", dxf: buildBlockDxf("BAND", rectBand(160, 20), ["Fabric, Cut 1"]), block: "BAND" };
+  const front: BandPart = { partId: "front", dxf: buildBlockDxf("FRONT", dartPanel(), ["Lining, Cut 1"]), block: "FRONT" };
   const flat: BandPart = { partId: "flat", dxf: buildBlockDxf("FLAT", rectBand(80, 40), ["Lining, Cut 1"]), block: "FLAT" };
 
-  const report = firstReport(bandRequest(band, [flat]));
+  const report = firstReport(bandRequest(band, [front, flat]));
 
   assert.equal(report.status, "error");
   const unresolved = report.diagnostics.find((d) => d.code === "geometry.band_neighbour_edge_unresolved");
   assert.ok(unresolved, "should emit band_neighbour_edge_unresolved");
+  // target は下流が読む contract field。犯人ピースを指す（集約 "band.seam/front.seam/flat.seam" でも "front" でもない）。
+  assert.equal(unresolved?.target, "flat.seam");
+  assert.equal(report.target, "flat.seam");
+  assert.equal((unresolved?.actual as { partId: string }).partId, "flat");
   assert.equal((unresolved?.actual as { dartedEdgeCount: number }).dartedEdgeCount, 0);
+});
+
+test("band-seam points a neighbour cut-quantity error at that neighbour's target", () => {
+  // 仕様保護（P2 contract）: neighbour の "Cut N" 欠落エラーも集約でなく当該 neighbour を target に指す。
+  const band: BandPart = { partId: "band", dxf: buildBlockDxf("BAND", rectBand(160, 20), ["Fabric, Cut 1"]), block: "BAND" };
+  const noCut: BandPart = { partId: "nocut", dxf: buildBlockDxf("NOCUT", dartPanel()), block: "NOCUT" }; // texts なし
+
+  const report = firstReport(bandRequest(band, [noCut]));
+
+  assert.equal(report.status, "error");
+  const missing = report.diagnostics.find((d) => d.code === "geometry.band_cut_quantity_missing");
+  assert.ok(missing, "should emit band_cut_quantity_missing");
+  assert.equal(missing?.target, "nocut.seam");
 });
 
 test("band-seam errors when the band has no readable Cut quantity", () => {
@@ -177,7 +196,10 @@ test("band-seam errors when the band has no readable Cut quantity", () => {
   const report = firstReport(bandRequest(band, [front]));
 
   assert.equal(report.status, "error");
-  assert.equal(report.diagnostics.some((d) => d.code === "geometry.band_cut_quantity_missing"), true);
+  const missing = report.diagnostics.find((d) => d.code === "geometry.band_cut_quantity_missing");
+  assert.ok(missing, "should emit band_cut_quantity_missing");
+  // band 側の欠落は band を指す（集約でも neighbour でもない）。
+  assert.equal(missing?.target, "band.seam");
 });
 
 test("band-seam errors when no neighbours are declared", () => {
