@@ -73,6 +73,10 @@ export type JoinKind =
   // seam-edge: path_ref が指す BLOCK 全体（外周）ではなく、宣言ペアが実際に縫い合う「共有辺」を
   // structuralEdges で発見して長さを測る。Loomit は「どの2パーツが縫うか」だけ宣言し、辺の発見は Seamlint。
   | "seam-edge"
+  // band-seam: バンド（waistband 等）が複数の隣接ピースに一度に縫い付く N-ary な縫い目。1辺=1辺ではなく
+  // 「バンド総周長 ≈ Σ(隣接ピースの仕上がり辺 × 裁断枚数) + closure」で照合する。from=バンド側、neighbours=
+  // 隣接ピース群。どのピース辺がバンドに接するかは Seamlint が幾何（dart 畳み辺）から発見する。
+  | "band-seam"
   | "closed-loop"
   | "overlap"
   | "intentional-corner"
@@ -118,6 +122,9 @@ export interface GeometryTolerance {
   ease_ratio?: readonly [number, number];
   gatherRatio?: readonly [number, number];
   gather_ratio?: readonly [number, number];
+  // band-seam の closure/ease 許容（バンド総周長と隣接合計の相対差の上限）。省略時は matcher 既定 6%。
+  closureRatio?: number;
+  closure_ratio?: number;
 }
 
 // seam-edge の per-connector 識別子。connector が宣言する「その seam の合印(notch)数」を運ぶ。
@@ -134,6 +141,9 @@ export interface GeometryCheckSpec {
   tolerance?: GeometryTolerance;
   range?: GeometryCheckRange;
   edgeSignature?: GeometryEdgeSignature;
+  // band-seam 用。from=バンド側、neighbours=そのバンドに接する隣接ピース群（BLOCK target のみ。辺は Seamlint が
+  // 発見するので辺 id は運ばない）。裁断枚数は各 part の DXF layer-1 "Cut N" から Seamlint が読む。
+  neighbours?: GeometryTarget[];
 }
 
 export type GeometryFormat = "svg" | "dxf";
