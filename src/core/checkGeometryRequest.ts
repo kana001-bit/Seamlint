@@ -484,7 +484,7 @@ function checkBandSeam(
   if (bandSource.format !== "dxf") {
     return errorReport(
       check,
-      target,
+      targetFor(check.from),
       "geometry.band_seam_requires_dxf",
       `Band-seam check "${check.id}" needs DXF geometry on the band to split its edges (got ${bandSource.format}).`
     );
@@ -510,7 +510,7 @@ function checkBandSeam(
   if (bandResult.cutQuantity === null || !(bandResult.cutQuantity > 0)) {
     return errorReport(
       check,
-      target,
+      targetFor(check.from),
       "geometry.band_cut_quantity_missing",
       `Band-seam check "${check.id}" could not read a positive "Cut N" quantity for the band "${check.from.partId}".`
     );
@@ -527,7 +527,7 @@ function checkBandSeam(
     if (resolved.source.format !== "dxf") {
       return errorReport(
         check,
-        target,
+        targetFor(neighbourTarget),
         "geometry.band_seam_requires_dxf",
         `Band-seam check "${check.id}" needs DXF geometry on neighbour "${neighbourTarget.partId}" (got ${resolved.source.format}).`
       );
@@ -542,7 +542,7 @@ function checkBandSeam(
     if (neighbourResult.cutQuantity === null || !(neighbourResult.cutQuantity > 0)) {
       return errorReport(
         check,
-        target,
+        targetFor(neighbourTarget),
         "geometry.band_cut_quantity_missing",
         `Band-seam check "${check.id}" could not read a positive "Cut N" quantity for neighbour "${neighbourTarget.partId}".`
       );
@@ -552,15 +552,17 @@ function checkBandSeam(
     // または複数本（どれが waist か決められない）なら、黙って推測せず理由付きで error にする（confidently-wrong 回避）。
     const dartedEdges = neighbourResult.edges.filter((edge) => edge.darts.length > 0);
     if (dartedEdges.length !== 1) {
+      // target は下流が読む contract field。集約 target ではなく当該 neighbour を指し、どのピースが原因かを機械可読にする。
+      const neighbourRef = targetFor(neighbourTarget);
       return {
         status: "error",
-        target,
+        target: neighbourRef,
         lengthMm: null,
         diagnostics: [
           {
             severity: "error",
             code: "geometry.band_neighbour_edge_unresolved",
-            target,
+            target: neighbourRef,
             message: `Band-seam check "${check.id}" could not uniquely identify the band-touching edge on neighbour "${neighbourTarget.partId}": found ${dartedEdges.length} dart-collapsed edges (expected exactly 1).`,
             expected: { checkId: check.id, kind: check.kind },
             actual: { partId: neighbourTarget.partId, dartedEdgeCount: dartedEdges.length }

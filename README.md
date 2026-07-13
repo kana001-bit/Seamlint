@@ -172,10 +172,15 @@ Each check declares a `JoinKind` — what should be true geometrically:
 - `sewn-seam` — two edges should be the same finished length
 - `eased-seam` — one edge is intentionally longer, within an ease ratio
 - `gathered-seam` — a marked range gathers into another, within a gather ratio
+- `seam-edge` — two DXF parts sew along a shared edge; Seamlint finds *which* edge from the geometry
+- `band-seam` — a band meets several pieces whose finished edges (× cut quantity) sum to it, within a closure ratio (DXF only)
 - `smooth-continuation` — two endpoints meet with no gap and matching tangent (same source only)
 - `closed-loop` — a path expected to close actually closes
 
-Correspondence points (notches/passmarks) are declared upstream; Seamlint never infers them.
+Correspondence points (notches/passmarks) are declared upstream; Seamlint never infers those. For the
+DXF `seam-edge` and `band-seam` kinds it does discover *which edge* the declared parts sew along — by
+length + notch signature, or, for a band's neighbours, by dart-fold — but that is edge discovery from
+the geometry, not inventing new correspondence points.
 
 ## Coordinate assumptions & compatibility
 
