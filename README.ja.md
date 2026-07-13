@@ -205,7 +205,25 @@ polyline（縫い線）を測る。閉じた `layer 1` 輪郭（裁断線）が�
 これは計測ツールであって CAD エンジンではない。将来、MVP の parser / sampler は
 `svg-pathdata` / `svg-path-properties` / `bezier-js` のような library で置き換え得る。
 
+## How This Was Built
+
+Seamlint は AI コーディングエージェントで作っているが、方向づけているのは私である。設計、幾何の
+契約、そしてあらゆる判断は私のもので、エージェントは私が定めたルールの下でコードを書く。その
+ルールは [`AGENTS.md`](AGENTS.md) にある。中でもこのツール全体を形づくる判断がこれだ——Seamlint
+の数値は布の裁断に流れるので、一番重い失敗は crash ではなく *自信ありげな誤った測定* である。
+だから幾何の前提が崩れたときは、黙って推測せず明示的な `error` を返す。設計の理由——覆した選択と
+その理由も含めて——はプロジェクトの design history に記録している。
+
 ## Status
 
-初期プロトタイプ。`package.json` はまだ `private` で version は `0.0.0`。公開された package は
-まだ無い。
+初期プロトタイプ——**public alpha を準備中**で、まだ公開 package ではない（`package.json` は
+`private` のまま `0.0.0`）。
+
+**いま測れること** — curve kink、seam length の一致、端点 gap + 接線、open loop、ease / gather
+比を、SVG または ASTM DXF 上で。DXF ではピースの net line を structural edge（ダーツ・ノッチ・
+band）に分割し、宣言された 2 part 間の *共有 seam 辺* を、notch 数の署名で切り分けて測る。すでに
+Loomit から `GeometryCheckRequest` の subprocess 契約経由で end-to-end に動く。
+
+**意図的に範囲外** — Seamlint は編集も自動修正もせず、対応点を推定もしない。幾何の前提が崩れて
+いれば、自信ありげな誤った数値を返すより `error` で測定を拒む。`.val` の直接読み込み、npm install
+導線、書き出し SVG の自動 normalization はまだ無い。
