@@ -209,7 +209,28 @@ are not renamed casually.
 This is a measuring tool, not a CAD engine. Later versions can replace the MVP parser and
 sampler with libraries such as `svg-pathdata`, `svg-path-properties`, or `bezier-js`.
 
+## How This Was Built
+
+Seamlint is built with AI coding agents, directed by me. The design, the geometry contracts, and
+every judgment call are mine; the agents write the code under the rules I set, which live in
+[`AGENTS.md`](AGENTS.md). One of those judgment calls shapes the whole tool: Seamlint's numbers
+flow into physical cutting, so the worst failure is a *confidently-wrong measurement*, not a
+crash — when the geometry assumptions are broken it must return an explicit `error` rather than a
+quiet guess. The reasoning behind the design, including the choices I reversed and why, is
+recorded in the project's design history.
+
 ## Status
 
-Early prototype. `package.json` is still `private` and versioned `0.0.0`; there is no published
-package yet.
+Early prototype — a **public alpha in preparation**, not a published package yet (`package.json`
+is still `private` at `0.0.0`).
+
+**Measures today** — curve kinks, seam-length match, endpoint gap + tangent, open loops, and
+ease / gather ratios, over SVG or ASTM DXF. On DXF it splits a piece's net line into structural
+edges (darts, notches, bands) and measures the *shared seam edge* between two declared parts,
+disambiguating with a notch-count signature. It already runs end-to-end from Loomit over the
+`GeometryCheckRequest` subprocess contract.
+
+**Deliberately out of scope** — Seamlint never edits, never auto-fixes, and never infers
+correspondence points; it refuses (with an `error`) to measure geometry whose assumptions are
+broken rather than returning a confident wrong number. Reading `.val` directly, an npm install
+path, and auto-normalizing exported SVG are not there yet.
