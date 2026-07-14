@@ -3,8 +3,10 @@ import { readFile } from "node:fs/promises";
 import { inspectSvgExport } from "../core/inspectSvgExport.ts";
 import { checkSvgPath } from "../core/checkSvgPath.ts";
 import { checkGeometryRequest } from "../core/checkGeometryRequest.ts";
+import { structuralEdges } from "../geometry/structuralEdges.ts";
 import { formatDiagnosticsText, formatGeometryRequestText, formatInspectionText } from "../diagnostics/format.ts";
 import type { CheckOptions, CheckReport, GeometryCheckRequest, GeometryRequestReport } from "../types.ts";
+import type { StructuralEdgesResult } from "../geometry/structuralEdges.ts";
 
 interface NumberConstraints {
   integer?: boolean;
@@ -18,6 +20,10 @@ async function main(argv: string[]): Promise<number> {
 
     if (command === "check-request") {
       return await runCheckRequest(argv.slice(1));
+    }
+
+    if (command === "edges") {
+      return await runEdges(argv.slice(1));
     }
 
     if (!filePath || (command !== "check" && command !== "inspect")) {
@@ -161,6 +167,123 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+interface EdgesOptions {
+  file: string | undefined;
+  block: string | undefined;
+  json: boolean;
+}
+
+// DXF BLOCK の構造辺ジオメトリ（edgeId / arcRange / points / lengthMm ほか）を出す薄い入口。
+// `check` が checkSvgPath を包むのと同じ構図で `structuralEdges` を包むだけ（read-only な幾何クエリで
+// diagnostic は返さない）。下流（Truer）が subprocess で辺の実座標を引き、seam overlay 描画や edge digest に
+// 使うための公開経路（docs/task-specs/truer-edge-addressing-bridge, docs/library-api.md の structuralEdges）。
+async function runEdges(args: string[]): Promise<number> {
+  let options: EdgesOptions;
+  try {
+    options = parseEdgesArgs(args);
+  } catch (error) {
+    emitEdgesError(errorMessage(error), "cli.invalid_arguments", null, wantsJson(args));
+    return 2;
+  }
+
+  if (!options.file) {
+    emitEdgesError("Missing <dxf-file>.", "cli.invalid_arguments", null, options.json);
+    return 2;
+  }
+  if (!options.block) {
+    emitEdgesError("Missing --block <name>.", "cli.invalid_arguments", null, options.json);
+    return 2;
+  }
+
+  let result: StructuralEdgesResult;
+  try {
+    const dxfText = await readFile(options.file, "utf8");
+    result = structuralEdges(dxfText, options.block);
+  } catch (error) {
+    // DxfPathError（退化ループ・不正 DXF）は自身の geometry.* code を持つ。ENOENT 等は input.* へ写す。
+    emitEdgesError(errorMessage(error), edgesErrorCode(error), options.block, options.json);
+    return 1;
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(formatEdgesText(result));
+  }
+  return 0;
+}
+
+function parseEdgesArgs(args: string[]): EdgesOptions {
+  let file: string | undefined;
+  let block: string | undefined;
+  let json = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    if (arg === "--block") {
+      const value = args[++index];
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--block requires a BLOCK name.");
+      }
+      block = value;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    if (file !== undefined) {
+      throw new Error("Expected at most one DXF file path.");
+    }
+    file = arg;
+  }
+
+  return { file, block, json };
+}
+
+// edges コマンドは diagnostic report ではなく幾何ドキュメントを返すので、error は診断形にせず
+// { error: { code, message } } の最小 envelope で出す（subprocess 側は exit code で分岐できる）。
+function emitEdgesError(message: string, code: string, blockName: string | null, json: boolean): void {
+  if (json) {
+    console.log(
+      JSON.stringify({ error: { code, message, ...(blockName ? { blockName } : {}) } }, null, 2)
+    );
+  } else {
+    console.error(`Seamlint error: ${message}`);
+  }
+}
+
+function edgesErrorCode(error: unknown): string {
+  const code = errorCode(error);
+  if (code && (code.startsWith("geometry.") || code.startsWith("input."))) {
+    return code;
+  }
+  if (code === "ENOENT") {
+    return "input.file_not_found";
+  }
+  if (code === "EACCES" || code === "EPERM") {
+    return "input.file_permission_denied";
+  }
+  return "cli.runtime_error";
+}
+
+function formatEdgesText(result: StructuralEdgesResult): string {
+  const cut = result.cutQuantity === null ? "?" : String(result.cutQuantity);
+  const lines: string[] = [
+    `BLOCK ${result.blockName} — ${result.edges.length} edges, perimeter ${result.perimeterMm.toFixed(1)} mm, cut ${cut}`
+  ];
+  for (const edge of result.edges) {
+    lines.push(
+      `  #${edge.edgeId}  ${edge.lengthMm.toFixed(1)} mm (finished ${edge.finishedLengthMm.toFixed(1)})  ` +
+        `arcRange [${edge.arcRange[0].toFixed(3)}, ${edge.arcRange[1].toFixed(3)}]  ${edge.points.length} pts`
+    );
+  }
+  return lines.join("\n");
+}
+
 function parseOptions(args: string[]): CheckOptions {
   const options: CheckOptions = {
     curveSteps: 24,
@@ -244,6 +367,7 @@ function printUsage(): void {
   slnt check <svg-file> --path <path-id> [options]
   slnt inspect <svg-file> [--json]
   slnt check-request [request.json] [--json]
+  slnt edges <dxf-file> --block <name> [--json]
 
 Options:
   --compare-to <path-id>            Compare with another path in the same SVG.
@@ -263,7 +387,12 @@ Inspect mode:
 
 Check-request mode:
   Reads a Loomit GeometryCheckRequest JSON (file arg, or stdin when omitted)
-  and prints a GeometryRequestReport. --json prints JSON; a text summary otherwise.`);
+  and prints a GeometryRequestReport. --json prints JSON; a text summary otherwise.
+
+Edges mode:
+  Reads an ASTM DXF file and prints the structural edges (edgeId, arcRange,
+  points, lengthMm, ...) of one BLOCK. --block is required. Read-only geometry
+  query for downstream tools (e.g. Truer seam overlays); returns no diagnostics.`);
 }
 
 function wantsJson(argv: string[]): boolean {
