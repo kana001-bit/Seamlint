@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { checkGeometryRequest } from "../src/core/checkGeometryRequest.ts";
 import { matchSharedEdge } from "../src/geometry/sharedEdgeSeam.ts";
+import { structuralEdges } from "../src/geometry/structuralEdges.ts";
 import type { StructuralEdge, StructuralNotch } from "../src/geometry/structuralEdges.ts";
 import type { GeometryCheckRequest } from "../src/types.ts";
 import type { Point } from "../src/types.ts";
@@ -310,6 +311,9 @@ test("seam-edge carries machine-readable edge addressing on a length mismatch (T
   assert.ok(fromStart >= 0 && fromStart < fromEnd && fromEnd <= 1, `fromEdge arcRange normalized: ${fromStart},${fromEnd}`);
   const [toStart, toEnd] = actual.toEdge!.arcRange;
   assert.ok(toStart >= 0 && toStart < toEnd && toEnd <= 1, `toEdge arcRange normalized: ${toStart},${toEnd}`);
+  // arcRange は structuralEdges の生値を丸めず素通し（Codex P2 回帰: 3桁丸めで微小辺を start===end に潰さない）。
+  assert.deepEqual(actual.fromEdge!.arcRange, structuralEdges(KNICKERS_DXF, "FRONT").edges[1].arcRange);
+  assert.deepEqual(actual.toEdge!.arcRange, structuralEdges(KNICKERS_DXF, "BACK").edges[1].arcRange);
 });
 
 test("sewn-seam (whole-path) does NOT carry edge addressing on a length mismatch", () => {
