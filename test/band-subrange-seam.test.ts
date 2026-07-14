@@ -13,6 +13,7 @@ function bandEdge(edgeId: number, finishedLengthMm: number): StructuralEdge {
     lengthMm: finishedLengthMm,
     finishedLengthMm,
     arcRange: [0, 0],
+    points: [], // matchBandSubrange は points を読まないのでダミー空。
     darts: [],
     notches: []
   };
