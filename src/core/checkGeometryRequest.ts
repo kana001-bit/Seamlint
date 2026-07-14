@@ -338,6 +338,12 @@ function checkSharedEdgeSeam(
     }
   );
 
+  // DXF seam-edge は共有辺の機械可読な住所（blockName + edgeId + arcRange）を持つ。length mismatch 診断に
+  // 両辺の住所を additive で載せ、下流（Truer）が診断 → 編集対象の辺を再導出せずに ProposalTarget/SeamEdge へ
+  // 解決できるようにする（Seamlint↔Truer edge-addressing bridge。docs/task-specs/truer-edge-addressing-bridge）。
+  // sewn-seam の whole-path 経路は構造辺を持たないので付けない（false な住所を作らない）。
+  addSeamEdgeAddressing(diagnostics, edgeAddress(fromResult, candidate.fromEdgeId), edgeAddress(toResult, candidate.toEdgeId));
+
   // どの辺を共有辺とみなしたかを info で残す（ceiling を外して実辺を測っている証跡・notch 対応も添える）。
   diagnostics.unshift(sharedEdgeMatchedDiagnostic(pairTarget, candidate, fromResult, toResult));
 
@@ -438,6 +444,47 @@ function sharedEdgeMatchedDiagnostic(
 
 function notchFractions(edge: StructuralEdge | undefined): number[] {
   return edge ? edge.notches.map((notch) => round(notch.edgePosition)) : [];
+}
+
+// DXF 構造辺の機械可読な住所。下流（Truer）の ProposalTarget / SeamEdge = { blockName, edgeId, arcRange } に
+// 1:1 対応する。arcRange は Seamlint 正規化（原点=最初の角・0..1・start<end）のまま、境界で丸めた値で出す。
+// 辺が取れなければ undefined（住所を捏造しない）。
+interface SeamEdgeAddress {
+  blockName: string;
+  edgeId: number;
+  arcRange: [number, number];
+}
+
+function edgeAddress(result: StructuralEdgesResult, edgeId: number): SeamEdgeAddress | undefined {
+  const edge = result.edges[edgeId];
+  if (!edge) {
+    return undefined;
+  }
+  return {
+    blockName: result.blockName,
+    edgeId,
+    arcRange: [round(edge.arcRange[0]), round(edge.arcRange[1])]
+  };
+}
+
+// length mismatch 診断（あれば1件）に fromEdge / toEdge を additive に足す。既存 actual field は保持し、住所が
+// 取れた側だけ載せる。他コード（seam_edge_matched 等）は対象外。DXF seam-edge 経路専用の enrich で、
+// sewn-seam whole-path 経路には呼ばれない（＝辺を持たない診断に false な住所を付けない）。
+function addSeamEdgeAddressing(
+  diagnostics: Diagnostic[],
+  fromEdge: SeamEdgeAddress | undefined,
+  toEdge: SeamEdgeAddress | undefined
+): void {
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code !== "geometry.seam_length_mismatch") {
+      continue;
+    }
+    diagnostic.actual = {
+      ...(diagnostic.actual as Record<string, unknown>),
+      ...(fromEdge ? { fromEdge } : {}),
+      ...(toEdge ? { toEdge } : {})
+    };
+  }
 }
 
 function roundCandidate(candidate: SharedEdgeCandidate): SharedEdgeCandidate {
