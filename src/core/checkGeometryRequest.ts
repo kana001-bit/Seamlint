@@ -466,7 +466,10 @@ function edgeAddress(result: StructuralEdgesResult, edgeId: number): SeamEdgeAdd
   return {
     blockName: result.blockName,
     edgeId,
-    arcRange: [round(edge.arcRange[0]), round(edge.arcRange[1])]
+    // arcRange は丸めない: これは測定値ではなく正規化 address（区間）で、精度が意味を持つ。3 桁丸めは微小辺を
+    // start===end に潰し、契約 0 <= start < end <= 1 を破って下流(Truer)へ無効な住所を渡す（Codex P2）。
+    // structuralEdges の値をそのまま素通しする（そこで既に finite・正規化済み）。
+    arcRange: [edge.arcRange[0], edge.arcRange[1]]
   };
 }
 
@@ -630,7 +633,8 @@ function checkBandSeam(
       partId: neighbourTarget.partId,
       blockName: neighbourResult.blockName,
       edgeId: bandEdge.edgeId,
-      arcRange: [round(bandEdge.arcRange[0]), round(bandEdge.arcRange[1])],
+      // arcRange は丸めない（address＝正規化区間。丸めると微小辺が start===end に潰れ契約違反。Codex P2）。
+      arcRange: [bandEdge.arcRange[0], bandEdge.arcRange[1]],
       finishedLengthMm: round(bandEdge.finishedLengthMm),
       cutQuantity: neighbourResult.cutQuantity
     });
