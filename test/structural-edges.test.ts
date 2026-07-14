@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DxfPathError, extractAstmCutQuantity, extractAstmNotchPoints } from "../src/geometry/dxfPath.ts";
 import { structuralEdges } from "../src/geometry/structuralEdges.ts";
+import { polylineLength } from "../src/geometry/vector.ts";
 import type { Point } from "../src/types.ts";
 
 // 最小の ASTM DXF を組み立てる。layer 14 の閉 POLYLINE を必須に、任意で layer 4 notch POINT と
@@ -292,4 +293,55 @@ test("reconciles the waistband length against the summed, cut-quantity-scaled pi
   // band は全周の合計に対して ~4% 大きいだけ（ギャザー/タックではない fitted band）。
   const ratio = bandEdge.lengthMm / totalWaistOpening;
   assert.ok(ratio > 1 && ratio < 1.06, `band/opening ratio ${ratio.toFixed(3)} (opening ${totalWaistOpening.toFixed(0)}mm)`);
+});
+
+test("exposes each edge's net-line points, including intermediate vertices on a bent edge", () => {
+  // 仕様保護（points 公開・Truer overlay の入力）: 各辺は start→end の折れ線頂点を持つ。直辺は2点、
+  // コーナー閾値(30°)未満の中間頂点を含む曲がり辺は3点以上。points の両端 === startPoint/endPoint、
+  // 不変条件 polylineLength(points) === lengthMm（points は lengthMm と同じ辺を辿る）。
+  const dxf = buildBlockDxf("PANEL2", [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 50 },
+    { x: 50, y: 55 }, // 上辺の中間頂点（~11° の緩い折れ＝コーナーではない）
+    { x: 0, y: 50 }
+  ]);
+  const result = structuralEdges(dxf, "PANEL2");
+
+  assert.equal(result.edges.length, 4);
+  // 直辺=2点、上辺（中間頂点 (50,55) を含む）=3点。
+  assert.deepEqual(
+    result.edges.map((edge) => edge.points.length),
+    [2, 2, 3, 2]
+  );
+  assert.deepEqual(result.edges[2].points, [
+    { x: 100, y: 50 },
+    { x: 50, y: 55 },
+    { x: 0, y: 50 }
+  ]);
+
+  for (const edge of result.edges) {
+    assert.deepEqual(edge.points[0], edge.startPoint);
+    assert.deepEqual(edge.points.at(-1), edge.endPoint);
+    assert.ok(
+      Math.abs(polylineLength(edge.points) - edge.lengthMm) < 1e-9,
+      `polylineLength ${polylineLength(edge.points)} !== lengthMm ${edge.lengthMm}`
+    );
+  }
+});
+
+test("a real curved seam edge exposes many net-line points, not just its two corners", () => {
+  // 仕様保護（実データ）: 実曲線 seam（FRONT 脇線 ~815mm）は多数の中間頂点を持つ＝住所から実ジオメトリを
+  // 描ける（下流 Truer の overlay）。両端は角、polylineLength は lengthMm と一致。
+  const outseam = structuralEdges(KNICKERS_DXF, "FRONT")
+    .edges.slice()
+    .sort((a, b) => b.lengthMm - a.lengthMm)[0];
+
+  assert.ok(outseam.points.length > 2, `curved outseam should carry intermediate points, got ${outseam.points.length}`);
+  assert.deepEqual(outseam.points[0], outseam.startPoint);
+  assert.deepEqual(outseam.points.at(-1), outseam.endPoint);
+  assert.ok(
+    Math.abs(polylineLength(outseam.points) - outseam.lengthMm) < 1e-6,
+    `polylineLength ${polylineLength(outseam.points)} !== lengthMm ${outseam.lengthMm}`
+  );
 });
