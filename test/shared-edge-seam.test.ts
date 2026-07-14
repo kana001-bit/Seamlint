@@ -17,6 +17,7 @@ function edge(edgeId: number, finishedLengthMm: number, notchFractions: readonly
     lengthMm: finishedLengthMm,
     finishedLengthMm,
     arcRange: [0, 0],
+    points: [], // matchSharedEdge は points を読まないのでダミー空。
     darts: [],
     notches: notchFractions.map(notchAt)
   };
