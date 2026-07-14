@@ -43,6 +43,9 @@ export interface StructuralEdge {
   edgeId: number; // ループ順の 0 始まり index。
   startPoint: Point; // 辺の始点となる角。
   endPoint: Point; // 辺の終点となる角。
+  points: Point[]; // start→end の折れ線頂点（reduced ループ上・両端含む）。lengthMm・arcRange と同基準
+  // （dart 先端は落とし口は開いたまま）で、polylineLength(points)===lengthMm。直辺は2点、曲線辺は中間頂点を含む。
+  // 下流（Truer）が住所から辺の実ジオメトリを引いて描画/digest するための座標列。
   lengthMm: number; // 畳んだ baseline に沿った net line 長（dart の口は開いたまま）。
   finishedLengthMm: number; // この辺の dart を縫い閉じた後の長さ（= 隣辺と突き合わせる量）。
   arcRange: [number, number]; // ループ上の正規化区間 [start, end]（最初の角を原点、0..1）。
@@ -245,6 +248,7 @@ export function structuralEdges(
     endIndex: number;
     startPoint: Point;
     endPoint: Point;
+    points: Point[];
     lengthMm: number;
     arcStart: number;
     memberReducedIndices: Set<number>;
@@ -256,6 +260,8 @@ export function structuralEdges(
     const startIndex = boundaries[b];
     const endIndex = boundaries[(b + 1) % boundaries.length];
     const members = new Set<number>([startIndex]);
+    // 辺の折れ線頂点を歩行順に収集（start を先頭に、end まで）。length と同じ辺を辿るので polylineLength===lengthMm。
+    const points: Point[] = [reduced[startIndex]];
     let length = 0;
     let index = startIndex;
     while (index !== endIndex) {
@@ -263,12 +269,14 @@ export function structuralEdges(
       length += distance(reduced[index], reduced[nextIndex]);
       index = nextIndex;
       members.add(index);
+      points.push(reduced[nextIndex]);
     }
     edgeAccumulators.push({
       startIndex,
       endIndex,
       startPoint: reduced[startIndex],
       endPoint: reduced[endIndex],
+      points,
       lengthMm: length,
       arcStart: cumulative,
       memberReducedIndices: members
@@ -342,6 +350,7 @@ export function structuralEdges(
       edgeId,
       startPoint: edge.startPoint,
       endPoint: edge.endPoint,
+      points: edge.points,
       lengthMm: edge.lengthMm,
       finishedLengthMm: edge.lengthMm - mouthTotal,
       arcRange: [edge.arcStart / perimeterMm, (edge.arcStart + edge.lengthMm) / perimeterMm],
