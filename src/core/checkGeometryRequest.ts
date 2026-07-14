@@ -436,6 +436,9 @@ function sharedEdgeMatchedDiagnostic(
     message: "Measured the shared seam edge instead of the whole piece outline.",
     actual: {
       ...roundCandidate(candidate),
+      // 機械可読な辺住所（下流 = Truer 向け）。roundCandidate の from/toEdgeId は後方互換のため据え置き。
+      fromEdge: edgeAddress(fromResult, candidate.fromEdgeId),
+      toEdge: edgeAddress(toResult, candidate.toEdgeId),
       fromNotchFractions: notchFractions(fromResult.edges[candidate.fromEdgeId]),
       toNotchFractions: notchFractions(toResult.edges[candidate.toEdgeId])
     }
@@ -508,9 +511,12 @@ function lengthAsPolyline(lengthMm: number): SampledPoint[] {
 }
 
 // band-seam の証跡: 各 neighbour について、どの辺をバンド接辺とみなし、その finished 長と裁断枚数を測ったか。
+// blockName / edgeId / arcRange は機械可読な辺住所（下流 = Truer 向け。seam-edge の fromEdge/toEdge と同形）。
 interface BandNeighbourTrace {
   partId: string;
+  blockName: string;
   edgeId: number;
+  arcRange: [number, number];
   finishedLengthMm: number;
   cutQuantity: number;
 }
@@ -622,7 +628,9 @@ function checkBandSeam(
     neighbours.push({ finishedLengthMm: bandEdge.finishedLengthMm, cutQuantity: neighbourResult.cutQuantity });
     neighbourTrace.push({
       partId: neighbourTarget.partId,
+      blockName: neighbourResult.blockName,
       edgeId: bandEdge.edgeId,
+      arcRange: [round(bandEdge.arcRange[0]), round(bandEdge.arcRange[1])],
       finishedLengthMm: round(bandEdge.finishedLengthMm),
       cutQuantity: neighbourResult.cutQuantity
     });
@@ -639,7 +647,9 @@ function checkBandSeam(
     return bandSeamFailureReport(check, target, match, neighbourTrace);
   }
 
-  const diagnostics: Diagnostic[] = [bandSeamMatchedDiagnostic(target, match, neighbourTrace)];
+  const diagnostics: Diagnostic[] = [
+    bandSeamMatchedDiagnostic(target, match, neighbourTrace, edgeAddress(bandResult, match.bandEdgeId))
+  ];
   return {
     status: statusForDiagnostics(diagnostics),
     target,
@@ -711,7 +721,8 @@ function resolveNeighbourGeometry(
 function bandSeamMatchedDiagnostic(
   target: string,
   measure: BandSubrangeMeasure,
-  neighbours: BandNeighbourTrace[]
+  neighbours: BandNeighbourTrace[],
+  bandEdge: SeamEdgeAddress | undefined
 ): Diagnostic {
   return {
     severity: "info",
@@ -720,6 +731,8 @@ function bandSeamMatchedDiagnostic(
     message: "Reconciled the band circumference against the sum of its neighbours' finished edges × cut quantity.",
     actual: {
       bandEdgeId: measure.bandEdgeId,
+      // 機械可読な辺住所（下流 = Truer 向け）。bandEdgeId は後方互換のため据え置き。各 neighbour も blockName/arcRange を持つ。
+      ...(bandEdge ? { bandEdge } : {}),
       bandLengthMm: round(measure.bandLengthMm),
       bandCutQuantity: measure.bandCutQuantity,
       bandTotalMm: round(measure.bandTotalMm),

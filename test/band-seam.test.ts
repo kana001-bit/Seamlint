@@ -90,25 +90,26 @@ test("band-seam reconciles the real WAISTBAND against FRONT+BACK waists × cut q
 
   const matched = report.diagnostics.find((d) => d.code === "geometry.band_seam_matched");
   assert.ok(matched, "should emit band_seam_matched");
+  type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
   const actual = matched?.actual as {
     bandTotalMm: number;
     sumMm: number;
     closureMm: number;
     closurePct: number;
-    neighbours: Array<{ partId: string; edgeId: number; finishedLengthMm: number; cutQuantity: number }>;
+    bandEdge: EdgeAddr;
+    neighbours: Array<EdgeAddr & { partId: string; finishedLengthMm: number; cutQuantity: number }>;
   };
   assert.equal(actual.bandTotalMm, 680);
   assert.equal(actual.sumMm, 655);
   assert.equal(actual.closureMm, 25);
   assert.equal(actual.closurePct, 0.038);
-  // dart 畳み辺（waist）を接辺として選び、外周や outseam ではないこと。
-  assert.deepEqual(
-    actual.neighbours,
-    [
-      { partId: "front", edgeId: 0, finishedLengthMm: 165, cutQuantity: 2 },
-      { partId: "back", edgeId: 0, finishedLengthMm: 162.5, cutQuantity: 2 }
-    ]
-  );
+  // dart 畳み辺（waist）を接辺として選び、外周や outseam ではないこと。各 neighbour は機械可読な辺住所も持つ（Truer bridge）。
+  assert.deepEqual(actual.neighbours, [
+    { partId: "front", blockName: "FRONT", edgeId: 0, arcRange: [0, 0.099], finishedLengthMm: 165, cutQuantity: 2 },
+    { partId: "back", blockName: "BACK", edgeId: 0, arcRange: [0, 0.112], finishedLengthMm: 162.5, cutQuantity: 2 }
+  ]);
+  // band 自身の周方向辺（最長 finished 辺）の住所も載る。
+  assert.deepEqual(actual.bandEdge, { blockName: "WAISTBAND", edgeId: 0, arcRange: [0, 0.466] });
 });
 
 test("band-seam defers the real band with sum-mismatch under a tighter closure tolerance", () => {

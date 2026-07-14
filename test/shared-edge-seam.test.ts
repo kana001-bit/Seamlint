@@ -254,9 +254,17 @@ test("seam-edge resolves the real front<->back to the outseam once the connector
   const matched = check.diagnostics.find((d) => d.code === "geometry.seam_edge_matched");
   assert.ok(matched, "should resolve and emit seam_edge_matched");
   // matched した辺は outseam（finished ~815mm・notch 2個）で、外周でも inseam(552) でも waist(165) でもない。
-  const actual = matched?.actual as { fromFinishedMm: number; fromNotchFractions: number[] } | undefined;
+  type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
+  const actual = matched?.actual as
+    | { fromFinishedMm: number; fromNotchFractions: number[]; fromEdge?: EdgeAddr; toEdge?: EdgeAddr }
+    | undefined;
   assert.ok((actual?.fromFinishedMm ?? 0) > 780 && (actual?.fromFinishedMm ?? 0) < 840, `outseam length ${actual?.fromFinishedMm}`);
   assert.equal(actual?.fromNotchFractions.length, 2);
+  // seam_edge_matched も機械可読な辺住所を持つ（seam_length_mismatch と同形・Truer bridge）。outseam は両側 edgeId 1。
+  assert.equal(actual?.fromEdge?.blockName, "FRONT");
+  assert.equal(actual?.fromEdge?.edgeId, 1);
+  assert.equal(actual?.toEdge?.blockName, "BACK");
+  assert.equal(actual?.toEdge?.edgeId, 1);
 });
 
 // ---- edge-addressing bridge（Truer 向け）: seam_length_mismatch に辺住所を載せる ----
