@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { checkGeometryRequest } from "../src/core/checkGeometryRequest.ts";
 import { matchSharedEdge } from "../src/geometry/sharedEdgeSeam.ts";
+import { structuralEdges } from "../src/geometry/structuralEdges.ts";
 import type { StructuralEdge, StructuralNotch } from "../src/geometry/structuralEdges.ts";
 import type { GeometryCheckRequest } from "../src/types.ts";
 import type { Point } from "../src/types.ts";
@@ -254,7 +255,76 @@ test("seam-edge resolves the real front<->back to the outseam once the connector
   const matched = check.diagnostics.find((d) => d.code === "geometry.seam_edge_matched");
   assert.ok(matched, "should resolve and emit seam_edge_matched");
   // matched した辺は outseam（finished ~815mm・notch 2個）で、外周でも inseam(552) でも waist(165) でもない。
-  const actual = matched?.actual as { fromFinishedMm: number; fromNotchFractions: number[] } | undefined;
+  type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
+  const actual = matched?.actual as
+    | { fromFinishedMm: number; fromNotchFractions: number[]; fromEdge?: EdgeAddr; toEdge?: EdgeAddr }
+    | undefined;
   assert.ok((actual?.fromFinishedMm ?? 0) > 780 && (actual?.fromFinishedMm ?? 0) < 840, `outseam length ${actual?.fromFinishedMm}`);
   assert.equal(actual?.fromNotchFractions.length, 2);
+  // seam_edge_matched も機械可読な辺住所を持つ（seam_length_mismatch と同形・Truer bridge）。outseam は両側 edgeId 1。
+  assert.equal(actual?.fromEdge?.blockName, "FRONT");
+  assert.equal(actual?.fromEdge?.edgeId, 1);
+  assert.equal(actual?.toEdge?.blockName, "BACK");
+  assert.equal(actual?.toEdge?.edgeId, 1);
+});
+
+// ---- edge-addressing bridge（Truer 向け）: seam_length_mismatch に辺住所を載せる ----
+
+// sewn-seam（whole-path 比較）の request。seam-edge と違い structuralEdges を通らない＝辺住所を持たない経路。
+function sewnSeamRequest(fromDxf: string, fromBlock: string, toDxf: string, toBlock: string): GeometryCheckRequest {
+  return {
+    parts: [
+      { partId: "from", geometrySource: "from.dxf", format: "dxf", unit: "mm", scale: 1, paths: { side: fromBlock }, geometryText: fromDxf },
+      { partId: "to", geometrySource: "to.dxf", format: "dxf", unit: "mm", scale: 1, paths: { side: toBlock }, geometryText: toDxf }
+    ],
+    checks: [{ id: "sewn-seam:from.side/to.side", kind: "sewn-seam", from: { partId: "from", pathRef: "side" }, to: { partId: "to", pathRef: "side" } }]
+  };
+}
+
+test("seam-edge carries machine-readable edge addressing on a length mismatch (Truer bridge)", () => {
+  // 仕様保護（edge-addressing bridge）: DXF seam-edge の seam_length_mismatch は、下流(Truer)が診断→編集対象の辺を
+  // 再導出せずに ProposalTarget/SeamEdge へ解決できるよう、両辺の住所 { blockName, edgeId, arcRange } を actual に
+  // additive で載せる。notchCount=2 で outseam に解決＝FRONT/BACK とも edgeId 1（814.6/806.7、7.8mm差 > 3mm）で mismatch。
+  const report = checkGeometryRequest(seamEdgeRequest(KNICKERS_DXF, "FRONT", KNICKERS_DXF, "BACK", 2));
+
+  const mismatch = report.reports[0].diagnostics.find((d) => d.code === "geometry.seam_length_mismatch");
+  assert.ok(mismatch, "expected a seam_length_mismatch on the outseam");
+  const actual = mismatch?.actual as {
+    fromLengthMm: number;
+    toLengthMm: number;
+    lengthDiffMm: number;
+    fromEdge?: { blockName: string; edgeId: number; arcRange: [number, number] };
+    toEdge?: { blockName: string; edgeId: number; arcRange: [number, number] };
+  };
+
+  // 既存 field は保持（後方互換）。
+  assert.equal(actual.fromLengthMm, 814.568);
+  assert.equal(actual.toLengthMm, 806.722);
+  assert.equal(actual.lengthDiffMm, 7.847);
+  // 新: 両辺の住所。blockName は BLOCK 名、edgeId は outseam(1)。
+  assert.equal(actual.fromEdge?.blockName, "FRONT");
+  assert.equal(actual.fromEdge?.edgeId, 1);
+  assert.equal(actual.toEdge?.blockName, "BACK");
+  assert.equal(actual.toEdge?.edgeId, 1);
+  // arcRange は Seamlint 正規化（0 <= start < end <= 1、Truer の isArcRange と同規約）。
+  const [fromStart, fromEnd] = actual.fromEdge!.arcRange;
+  assert.ok(fromStart >= 0 && fromStart < fromEnd && fromEnd <= 1, `fromEdge arcRange normalized: ${fromStart},${fromEnd}`);
+  const [toStart, toEnd] = actual.toEdge!.arcRange;
+  assert.ok(toStart >= 0 && toStart < toEnd && toEnd <= 1, `toEdge arcRange normalized: ${toStart},${toEnd}`);
+  // arcRange は structuralEdges の生値を丸めず素通し（Codex P2 回帰: 3桁丸めで微小辺を start===end に潰さない）。
+  assert.deepEqual(actual.fromEdge!.arcRange, structuralEdges(KNICKERS_DXF, "FRONT").edges[1].arcRange);
+  assert.deepEqual(actual.toEdge!.arcRange, structuralEdges(KNICKERS_DXF, "BACK").edges[1].arcRange);
+});
+
+test("sewn-seam (whole-path) does NOT carry edge addressing on a length mismatch", () => {
+  // 仕様保護（false な住所を作らない）: whole-path の sewn-seam は structuralEdges を通らず構造辺を持たない。
+  // length mismatch に fromEdge/toEdge を載せてはいけない（辺住所は seam-edge 等の辺分割経路専用）。
+  // plateau(200)=周長580 vs plateau(260)=700 → 120mm差で mismatch は鳴るが、住所は付かないこと。
+  const report = checkGeometryRequest(sewnSeamRequest(buildBlockDxf("FROM", plateau(200)), "FROM", buildBlockDxf("TO", plateau(260)), "TO"));
+
+  const mismatch = report.reports[0].diagnostics.find((d) => d.code === "geometry.seam_length_mismatch");
+  assert.ok(mismatch, "expected a seam_length_mismatch on the whole-path compare");
+  const actual = mismatch?.actual as Record<string, unknown>;
+  assert.equal("fromEdge" in actual, false);
+  assert.equal("toEdge" in actual, false);
 });

@@ -338,6 +338,12 @@ function checkSharedEdgeSeam(
     }
   );
 
+  // DXF seam-edge は共有辺の機械可読な住所（blockName + edgeId + arcRange）を持つ。length mismatch 診断に
+  // 両辺の住所を additive で載せ、下流（Truer）が診断 → 編集対象の辺を再導出せずに ProposalTarget/SeamEdge へ
+  // 解決できるようにする（Seamlint↔Truer edge-addressing bridge。docs/task-specs/truer-edge-addressing-bridge）。
+  // sewn-seam の whole-path 経路は構造辺を持たないので付けない（false な住所を作らない）。
+  addSeamEdgeAddressing(diagnostics, edgeAddress(fromResult, candidate.fromEdgeId), edgeAddress(toResult, candidate.toEdgeId));
+
   // どの辺を共有辺とみなしたかを info で残す（ceiling を外して実辺を測っている証跡・notch 対応も添える）。
   diagnostics.unshift(sharedEdgeMatchedDiagnostic(pairTarget, candidate, fromResult, toResult));
 
@@ -430,6 +436,9 @@ function sharedEdgeMatchedDiagnostic(
     message: "Measured the shared seam edge instead of the whole piece outline.",
     actual: {
       ...roundCandidate(candidate),
+      // 機械可読な辺住所（下流 = Truer 向け）。roundCandidate の from/toEdgeId は後方互換のため据え置き。
+      fromEdge: edgeAddress(fromResult, candidate.fromEdgeId),
+      toEdge: edgeAddress(toResult, candidate.toEdgeId),
       fromNotchFractions: notchFractions(fromResult.edges[candidate.fromEdgeId]),
       toNotchFractions: notchFractions(toResult.edges[candidate.toEdgeId])
     }
@@ -438,6 +447,50 @@ function sharedEdgeMatchedDiagnostic(
 
 function notchFractions(edge: StructuralEdge | undefined): number[] {
   return edge ? edge.notches.map((notch) => round(notch.edgePosition)) : [];
+}
+
+// DXF 構造辺の機械可読な住所。下流（Truer）の ProposalTarget / SeamEdge = { blockName, edgeId, arcRange } に
+// 1:1 対応する。arcRange は Seamlint 正規化（原点=最初の角・0..1・start<end）のまま、境界で丸めた値で出す。
+// 辺が取れなければ undefined（住所を捏造しない）。
+interface SeamEdgeAddress {
+  blockName: string;
+  edgeId: number;
+  arcRange: [number, number];
+}
+
+function edgeAddress(result: StructuralEdgesResult, edgeId: number): SeamEdgeAddress | undefined {
+  const edge = result.edges[edgeId];
+  if (!edge) {
+    return undefined;
+  }
+  return {
+    blockName: result.blockName,
+    edgeId,
+    // arcRange は丸めない: これは測定値ではなく正規化 address（区間）で、精度が意味を持つ。3 桁丸めは微小辺を
+    // start===end に潰し、契約 0 <= start < end <= 1 を破って下流(Truer)へ無効な住所を渡す（Codex P2）。
+    // structuralEdges の値をそのまま素通しする（そこで既に finite・正規化済み）。
+    arcRange: [edge.arcRange[0], edge.arcRange[1]]
+  };
+}
+
+// length mismatch 診断（あれば1件）に fromEdge / toEdge を additive に足す。既存 actual field は保持し、住所が
+// 取れた側だけ載せる。他コード（seam_edge_matched 等）は対象外。DXF seam-edge 経路専用の enrich で、
+// sewn-seam whole-path 経路には呼ばれない（＝辺を持たない診断に false な住所を付けない）。
+function addSeamEdgeAddressing(
+  diagnostics: Diagnostic[],
+  fromEdge: SeamEdgeAddress | undefined,
+  toEdge: SeamEdgeAddress | undefined
+): void {
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code !== "geometry.seam_length_mismatch") {
+      continue;
+    }
+    diagnostic.actual = {
+      ...(diagnostic.actual as Record<string, unknown>),
+      ...(fromEdge ? { fromEdge } : {}),
+      ...(toEdge ? { toEdge } : {})
+    };
+  }
 }
 
 function roundCandidate(candidate: SharedEdgeCandidate): SharedEdgeCandidate {
@@ -461,9 +514,12 @@ function lengthAsPolyline(lengthMm: number): SampledPoint[] {
 }
 
 // band-seam の証跡: 各 neighbour について、どの辺をバンド接辺とみなし、その finished 長と裁断枚数を測ったか。
+// blockName / edgeId / arcRange は機械可読な辺住所（下流 = Truer 向け。seam-edge の fromEdge/toEdge と同形）。
 interface BandNeighbourTrace {
   partId: string;
+  blockName: string;
   edgeId: number;
+  arcRange: [number, number];
   finishedLengthMm: number;
   cutQuantity: number;
 }
@@ -575,7 +631,10 @@ function checkBandSeam(
     neighbours.push({ finishedLengthMm: bandEdge.finishedLengthMm, cutQuantity: neighbourResult.cutQuantity });
     neighbourTrace.push({
       partId: neighbourTarget.partId,
+      blockName: neighbourResult.blockName,
       edgeId: bandEdge.edgeId,
+      // arcRange は丸めない（address＝正規化区間。丸めると微小辺が start===end に潰れ契約違反。Codex P2）。
+      arcRange: [bandEdge.arcRange[0], bandEdge.arcRange[1]],
       finishedLengthMm: round(bandEdge.finishedLengthMm),
       cutQuantity: neighbourResult.cutQuantity
     });
@@ -592,7 +651,9 @@ function checkBandSeam(
     return bandSeamFailureReport(check, target, match, neighbourTrace);
   }
 
-  const diagnostics: Diagnostic[] = [bandSeamMatchedDiagnostic(target, match, neighbourTrace)];
+  const diagnostics: Diagnostic[] = [
+    bandSeamMatchedDiagnostic(target, match, neighbourTrace, edgeAddress(bandResult, match.bandEdgeId))
+  ];
   return {
     status: statusForDiagnostics(diagnostics),
     target,
@@ -664,7 +725,8 @@ function resolveNeighbourGeometry(
 function bandSeamMatchedDiagnostic(
   target: string,
   measure: BandSubrangeMeasure,
-  neighbours: BandNeighbourTrace[]
+  neighbours: BandNeighbourTrace[],
+  bandEdge: SeamEdgeAddress | undefined
 ): Diagnostic {
   return {
     severity: "info",
@@ -673,6 +735,8 @@ function bandSeamMatchedDiagnostic(
     message: "Reconciled the band circumference against the sum of its neighbours' finished edges × cut quantity.",
     actual: {
       bandEdgeId: measure.bandEdgeId,
+      // 機械可読な辺住所（下流 = Truer 向け）。bandEdgeId は後方互換のため据え置き。各 neighbour も blockName/arcRange を持つ。
+      ...(bandEdge ? { bandEdge } : {}),
       bandLengthMm: round(measure.bandLengthMm),
       bandCutQuantity: measure.bandCutQuantity,
       bandTotalMm: round(measure.bandTotalMm),

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { checkGeometryRequest } from "../src/core/checkGeometryRequest.ts";
+import { structuralEdges } from "../src/geometry/structuralEdges.ts";
 import type { GeometryCheckRequest, GeometryCheckSpec, GeometryPartRef, Point } from "../src/types.ts";
 
 // 最小 ASTM DXF（layer 14 の閉 POLYLINE）を1 BLOCK 分。任意で layer 1 注記 TEXT（"Cut N"）を足せる。
@@ -90,25 +91,32 @@ test("band-seam reconciles the real WAISTBAND against FRONT+BACK waists × cut q
 
   const matched = report.diagnostics.find((d) => d.code === "geometry.band_seam_matched");
   assert.ok(matched, "should emit band_seam_matched");
+  type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
   const actual = matched?.actual as {
     bandTotalMm: number;
     sumMm: number;
     closureMm: number;
     closurePct: number;
-    neighbours: Array<{ partId: string; edgeId: number; finishedLengthMm: number; cutQuantity: number }>;
+    bandEdge: EdgeAddr;
+    neighbours: Array<EdgeAddr & { partId: string; finishedLengthMm: number; cutQuantity: number }>;
   };
   assert.equal(actual.bandTotalMm, 680);
   assert.equal(actual.sumMm, 655);
   assert.equal(actual.closureMm, 25);
   assert.equal(actual.closurePct, 0.038);
-  // dart 畳み辺（waist）を接辺として選び、外周や outseam ではないこと。
-  assert.deepEqual(
-    actual.neighbours,
-    [
-      { partId: "front", edgeId: 0, finishedLengthMm: 165, cutQuantity: 2 },
-      { partId: "back", edgeId: 0, finishedLengthMm: 162.5, cutQuantity: 2 }
-    ]
-  );
+  // dart 畳み辺（waist）を接辺として選び、外周や outseam ではないこと。各 neighbour は機械可読な辺住所も持つ（Truer bridge）。
+  const [front, back] = actual.neighbours;
+  assert.deepEqual([front.partId, front.blockName, front.edgeId, front.finishedLengthMm, front.cutQuantity], ["front", "FRONT", 0, 165, 2]);
+  assert.deepEqual([back.partId, back.blockName, back.edgeId, back.finishedLengthMm, back.cutQuantity], ["back", "BACK", 0, 162.5, 2]);
+  assert.deepEqual([actual.bandEdge.blockName, actual.bandEdge.edgeId], ["WAISTBAND", 0]);
+  // arcRange は structuralEdges の値を丸めず素通し（Codex P2 回帰: 3桁丸めで微小辺を start===end に潰さない）。
+  assert.deepEqual(front.arcRange, structuralEdges(KNICKERS_DXF, "FRONT").edges[0].arcRange);
+  assert.deepEqual(back.arcRange, structuralEdges(KNICKERS_DXF, "BACK").edges[0].arcRange);
+  assert.deepEqual(actual.bandEdge.arcRange, structuralEdges(KNICKERS_DXF, "WAISTBAND").edges[0].arcRange);
+  // 契約: 0 <= start < end <= 1。
+  for (const addr of [front, back, actual.bandEdge]) {
+    assert.ok(addr.arcRange[0] >= 0 && addr.arcRange[0] < addr.arcRange[1] && addr.arcRange[1] <= 1, `arcRange ${addr.arcRange}`);
+  }
 });
 
 test("band-seam defers the real band with sum-mismatch under a tighter closure tolerance", () => {
