@@ -1,4 +1,5 @@
 import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.ts";
+import { DEFAULT_ENDPOINT_TOLERANCE_MM, DEFAULT_TANGENT_TOLERANCE_DEG } from "../config/defaults.ts";
 import type { Diagnostic, Point, SampledPoint } from "../types.ts";
 
 interface EndpointTangentOptions {
@@ -22,8 +23,8 @@ export function checkEndpointTangentCompatibility(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const target = options.target ?? "seam";
-  const endpointToleranceMm = options.endpointToleranceMm ?? 0.5;
-  const tangentToleranceDeg = options.tangentToleranceDeg ?? 8;
+  const endpointToleranceMm = options.endpointToleranceMm ?? DEFAULT_ENDPOINT_TOLERANCE_MM;
+  const tangentToleranceDeg = options.tangentToleranceDeg ?? DEFAULT_TANGENT_TOLERANCE_DEG;
 
   if (fromPoints.length < 2 || toPoints.length < 2) {
     diagnostics.push({

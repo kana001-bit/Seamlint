@@ -4,15 +4,23 @@ import { polylineLength } from "../geometry/vector.ts";
 import { checkCurveSmoothness } from "../rules/curveSmoothness.ts";
 import { checkEndpointTangentCompatibility } from "../rules/endpointTangentCompatibility.ts";
 import { checkSeamLengthCompatibility } from "../rules/seamLengthCompatibility.ts";
+import {
+  DEFAULT_ANGLE_THRESHOLD_DEG,
+  DEFAULT_CURVE_SPACING_MM,
+  DEFAULT_CURVE_STEPS,
+  DEFAULT_ENDPOINT_TOLERANCE_MM,
+  DEFAULT_LENGTH_TOLERANCE_MM,
+  DEFAULT_TANGENT_TOLERANCE_DEG
+} from "../config/defaults.ts";
 import type { CheckOptions, CheckReport, Diagnostic, ReportStatus, SampledPoint } from "../types.ts";
 
 const DEFAULT_OPTIONS = {
-  curveSteps: 24,
-  curveSpacingMm: 5,
-  angleThresholdDeg: 25,
-  lengthToleranceMm: 3,
-  endpointToleranceMm: 0.5,
-  tangentToleranceDeg: 8,
+  curveSteps: DEFAULT_CURVE_STEPS,
+  curveSpacingMm: DEFAULT_CURVE_SPACING_MM,
+  angleThresholdDeg: DEFAULT_ANGLE_THRESHOLD_DEG,
+  lengthToleranceMm: DEFAULT_LENGTH_TOLERANCE_MM,
+  endpointToleranceMm: DEFAULT_ENDPOINT_TOLERANCE_MM,
+  tangentToleranceDeg: DEFAULT_TANGENT_TOLERANCE_DEG,
   closed: false,
   expectSmooth: false
 };
