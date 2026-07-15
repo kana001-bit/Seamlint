@@ -1,4 +1,5 @@
 import { polylineLength } from "../geometry/vector.ts";
+import { DEFAULT_LENGTH_TOLERANCE_MM } from "../config/defaults.ts";
 import type { Diagnostic, SampledPoint } from "../types.ts";
 
 interface SeamLengthOptions {
@@ -13,7 +14,7 @@ export function checkSeamLengthCompatibility(
   options: SeamLengthOptions = {}
 ): Diagnostic[] {
   const target = options.target ?? "seam";
-  const toleranceMm = options.toleranceMm ?? 3;
+  const toleranceMm = options.toleranceMm ?? DEFAULT_LENGTH_TOLERANCE_MM;
   const easeRatioRange = options.easeRatioRange;
 
   if (fromPoints.length < 2 || toPoints.length < 2) {

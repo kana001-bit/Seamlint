@@ -5,6 +5,13 @@ import { checkSvgPath } from "../core/checkSvgPath.ts";
 import { checkGeometryRequest } from "../core/checkGeometryRequest.ts";
 import { structuralEdges } from "../geometry/structuralEdges.ts";
 import { formatDiagnosticsText, formatGeometryRequestText, formatInspectionText } from "../diagnostics/format.ts";
+import {
+  DEFAULT_ANGLE_THRESHOLD_DEG,
+  DEFAULT_CURVE_STEPS,
+  DEFAULT_ENDPOINT_TOLERANCE_MM,
+  DEFAULT_LENGTH_TOLERANCE_MM,
+  DEFAULT_TANGENT_TOLERANCE_DEG
+} from "../config/defaults.ts";
 import type { CheckOptions, CheckReport, GeometryCheckRequest, GeometryRequestReport } from "../types.ts";
 import type { StructuralEdgesResult } from "../geometry/structuralEdges.ts";
 
@@ -285,12 +292,9 @@ function formatEdgesText(result: StructuralEdgesResult): string {
 }
 
 function parseOptions(args: string[]): CheckOptions {
+  // 数値の既定値はここに置かない。未指定のフラグはキーを立てず、core の DEFAULT_OPTIONS
+  // (src/config/defaults.ts が真実源) に埋めさせる。ここで再宣言すると値が二重管理になり drift する。
   const options: CheckOptions = {
-    curveSteps: 24,
-    angleThresholdDeg: 25,
-    lengthToleranceMm: 3,
-    endpointToleranceMm: 0.5,
-    tangentToleranceDeg: 8,
     closed: false,
     expectSmooth: false,
     json: false
@@ -375,12 +379,12 @@ Options:
                                     (endpoint gap + tangent) instead of seam length.
   --closed                          Expect the selected path to be a closed loop.
   --json                            Print JSON diagnostics.
-  --curve-steps <number>            Minimum samples per Bezier segment. Default: 24.
+  --curve-steps <number>            Minimum samples per Bezier segment. Default: ${DEFAULT_CURVE_STEPS}.
                                     Long curves are subsampled finer by arc length.
-  --angle-threshold-deg <number>    Curve kink warning threshold. Default: 25.
-  --length-tolerance-mm <number>    Seam length warning threshold. Default: 3.
-  --endpoint-tolerance-mm <number>  Endpoint gap warning threshold. Default: 0.5.
-  --tangent-tolerance-deg <number>  Tangent mismatch warning threshold. Default: 8.
+  --angle-threshold-deg <number>    Curve kink warning threshold. Default: ${DEFAULT_ANGLE_THRESHOLD_DEG}.
+  --length-tolerance-mm <number>    Seam length warning threshold. Default: ${DEFAULT_LENGTH_TOLERANCE_MM}.
+  --endpoint-tolerance-mm <number>  Endpoint gap warning threshold. Default: ${DEFAULT_ENDPOINT_TOLERANCE_MM}.
+  --tangent-tolerance-deg <number>  Tangent mismatch warning threshold. Default: ${DEFAULT_TANGENT_TOLERANCE_DEG}.
 
 Inspect mode:
   --json                            Print the export inspection as JSON.
