@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DxfPathError, extractAstmCutQuantity, extractAstmNotchPoints } from "../src/geometry/dxfPath.ts";
-import { structuralEdges } from "../src/geometry/structuralEdges.ts";
+import { locateInteriorEdge, structuralEdges } from "../src/geometry/structuralEdges.ts";
 import { polylineLength } from "../src/geometry/vector.ts";
 import type { Point } from "../src/types.ts";
 
@@ -344,4 +344,69 @@ test("a real curved seam edge exposes many net-line points, not just its two cor
     Math.abs(polylineLength(outseam.points) - outseam.lengthMm) < 1e-6,
     `polylineLength ${polylineLength(outseam.points)} !== lengthMm ${outseam.lengthMm}`
   );
+});
+
+// locateInteriorEdge: curve_kink の辺住所付与（案A）。一意な内部 kink だけ住所を返し、コーナー・ダート先端・
+// ダート肩・off-line 点は null（住所を捏造しない）を、決定的な合成 DXF で両面固定する。
+//
+// A(0,0) B(100,0) C(100,60) M(50,72) D(0,60): 角 A/B/C/D は >30°。M は上辺の ~27° の辺内 kink（reduced でも kink）。
+const KINK_PANEL: Point[] = [
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  { x: 100, y: 60 },
+  { x: 50, y: 72 },
+  { x: 0, y: 60 }
+];
+
+test("locateInteriorEdge addresses a genuine in-edge kink with edgeId, arcRange and vertexIndex", () => {
+  const result = structuralEdges(buildBlockDxf("PANEL", KINK_PANEL), "PANEL");
+  // 上辺（C→M→D）は角 C と D の間の 1 辺で、内部頂点 M を持つ。
+  const location = locateInteriorEdge(result, { x: 50, y: 72 });
+  assert.ok(location, "interior kink M should resolve to a unique edge address");
+  const owner = result.edges[location.edgeId];
+  assert.deepEqual(owner.startPoint, { x: 100, y: 60 });
+  assert.deepEqual(owner.endPoint, { x: 0, y: 60 });
+  assert.equal(location.vertexIndex, 1); // owner.points = [C, M, D] の M。
+  assert.deepEqual(owner.points[location.vertexIndex], { x: 50, y: 72 });
+  // arcRange は住所（正規化区間）なので owner の値を丸めず素通し。
+  assert.deepEqual(location.arcRange, owner.arcRange);
+});
+
+test("locateInteriorEdge returns null for a structural corner (edge boundary, not interior)", () => {
+  const result = structuralEdges(buildBlockDxf("PANEL", KINK_PANEL), "PANEL");
+  // C(100,60) は 2 辺の共有点＝角。一意な内部辺は無い → 住所を出さない（本物の角を潰させない）。
+  assert.equal(locateInteriorEdge(result, { x: 100, y: 60 }), null);
+});
+
+test("locateInteriorEdge returns null for a dart shoulder (sharp in raw, straight in the reduced net line)", () => {
+  // dart V: 肩 S(60,50)/(40,50) は raw 経路では鋭角だが、先端を畳んだ reduced 上辺 y=50 上で直線化する。
+  // curve_kink は raw で鳴るが、reduced net line 上では kink ではないので住所を出さない（Truer に肩を潰させない）。
+  const dxf = buildBlockDxf("PANEL", [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 50 },
+    { x: 60, y: 50 }, // 肩
+    { x: 50, y: 20 }, // dart 先端（畳んで落ちる）
+    { x: 40, y: 50 }, // 肩
+    { x: 0, y: 50 }
+  ]);
+  const result = structuralEdges(dxf, "PANEL");
+  assert.equal(locateInteriorEdge(result, { x: 60, y: 50 }), null); // 肩
+  assert.equal(locateInteriorEdge(result, { x: 50, y: 20 }), null); // 先端（reduced ループ外）
+});
+
+test("locateInteriorEdge returns null for a point equidistant to two nearly-coincident edges (ambiguous)", () => {
+  // 等距離ガード（自己接触/極端に近い辺）: 厚み 0.08mm の帯は上辺(y=0.08)と下辺(y=0)が 0.08mm しか離れない。
+  // 中点 (50,0.04) は両長辺へ 0.04mm 等距離。0.04mm は「辺上」許容(0.05mm)内なので off-line ではないが、
+  // どちらの辺に属すかを一意に決められない → 住所を出さない（best と second-best の offset 差が許容以内）。
+  const dxf = buildBlockDxf("SLIVER", [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 0.08 },
+    { x: 0, y: 0.08 }
+  ]);
+  const result = structuralEdges(dxf, "SLIVER");
+  // 前提: 帯は 4 辺で、上下の長辺は 0.08mm 差＝どちらも点から 0.05mm 許容内に入る（off-line 分岐ではない）。
+  assert.equal(result.edges.length, 4);
+  assert.equal(locateInteriorEdge(result, { x: 50, y: 0.04 }), null);
 });

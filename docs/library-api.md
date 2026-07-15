@@ -19,6 +19,7 @@ import {
   inspectSvgExport,
   pointsForPath,
   structuralEdges,
+  locateInteriorEdge,
   projectAstmPassmarkToMarker,
   AstmPassmarkProjectionError,
 } from "seamlint";
@@ -188,6 +189,26 @@ interface StructuralEdge {
   （armhole / outseam / inseam）は正確。darted 辺の points は肩を繋いだ潰れ線になる。
 - 退化した BLOCK（周長 0 の layer 14 POLYLINE 等）は silent に測らず `DxfPathError`
   （`geometry.invalid_dxf_path`）を throw する。
+
+## `locateInteriorEdge(result, point, options?)`
+
+`structuralEdges` の結果に対して、ループ上の 1 点（`geometry.curve_kink` の頂点など）が**一意に乗る構造辺**を
+解決する。`checkGeometryRequest` が DXF 経路の curve_kink 診断へ `actual.edge` を足すのに使う分類器。
+
+```ts
+const result = structuralEdges(dxfText, "PANEL");
+locateInteriorEdge(result, { x: 50, y: 72 });
+// => { edgeId: 2, arcRange: [0.4956, 0.8141], vertexIndex: 1 }  一意な辺内部の kink
+locateInteriorEdge(result, { x: 100, y: 60 });
+// => null  角（辺境界）/ ダート先端 / ダート肩 / ambiguous は住所を出さない
+```
+
+- 返すのは **reduced 構造 net line 上でもなお `kinkAngleThresholdDeg`（既定 25°）超の direction change を持つ、
+  一意な辺内部の頂点**だけ。角（辺の端点）・ダート先端（reduced ループ外）・ダート肩（reduced では直線）・
+  2 辺に等距離な ambiguous 点・頂点に一致しない点は `null`（住所を捏造しない。案A）。
+- `vertexIndex` はその辺 `points` 内の一致頂点 index。下流（Truer）が `slnt edges` の net-line 頂点と
+  丸め誤差なしで対応づけられる。診断側の contract（`actual.edge`）は [Diagnostics Reference](diagnostics.md) の
+  「辺の機械可読アドレス」節を参照。
 
 ## `projectAstmPassmarkToMarker(dxfText, blockName, point)`
 
