@@ -133,6 +133,8 @@ additive に載せる。下流（Truer 等）が診断から編集対象の辺�
 - `geometry.seam_length_mismatch`（DXF seam-edge） / `geometry.seam_edge_matched` → `actual.fromEdge` / `actual.toEdge`
 - `geometry.band_seam_matched` → `actual.bandEdge`（band 周方向辺）＋ `actual.neighbours[]` の各要素が
   `blockName` / `edgeId` / `arcRange` を持つ
+- `geometry.curve_kink`（DXF closed-loop 等） → `actual.edge`（＋任意で `actual.edge.vertexIndex`）。ただし
+  **一意な「辺の内側の kink」だけ**に載せる（下記）。
 
 ```jsonc
 // seam_length_mismatch（既存 length field は保持）
@@ -141,7 +143,21 @@ additive に載せる。下流（Truer 等）が診断から編集対象の辺�
   "fromEdge": { "blockName": "FRONT", "edgeId": 1, "arcRange": [0.099, 0.499] },
   "toEdge":   { "blockName": "BACK",  "edgeId": 1, "arcRange": [0.112, 0.471] }
 }
+
+// curve_kink（既存 angleDeg / point は保持）。edge は「一意な内部 kink」のときだけ付く。
+"actual": {
+  "angleDeg": 27.0, "point": { "x": 50, "y": 72 },
+  "edge": { "blockName": "PANEL", "edgeId": 2, "arcRange": [0.4956, 0.8141], "vertexIndex": 1 }
+}
 ```
+
+> **curve_kink の住所は「一意な内部 kink」限定。** curve_kink は raw/sampled 経路で発火するので、実データでは
+> ほとんどが**本物の角（辺境界・73〜127°）やダート先端・ダート肩**に乗る。これらには `actual.edge` を
+> **付けない**（＝住所が無いことが下流 Truer への「自動補正しない」の合図。角やダートを潰させない）。
+> 付けるのは、reduced 構造 net line 上でもなお閾値超の direction change を持つ、一意な辺内部の頂点だけ:
+> コーナー（辺の端点）／ダート先端（reduced ループから落ちて off-line）／ダート肩（reduced では直線）／
+> 2 辺に等距離な ambiguous 点／頂点に一致しない点は、いずれも住所を出さない。`vertexIndex` はその辺
+> `points` 内の一致頂点 index（`slnt edges` の net-line 頂点と対応）。SVG(legacy) 経路は辺分割しないので住所なし。
 
 - `blockName`: DXF BLOCK 名。`edgeId`: `structuralEdges` のループ順 index（**number**。下流 schema が string
   なら coerce）。`arcRange`: 正規化 [start, end]（原点 = 最初の角・0..1・start < end）。

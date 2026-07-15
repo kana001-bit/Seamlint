@@ -126,6 +126,74 @@ test("surfaces a real block's genuine pattern corners as curve_kink warnings by 
   );
 });
 
+test("does not attach an edge address to a real block's genuine corner kinks (they are edge boundaries)", () => {
+  // 契約（案A・Truer 向け辺住所）: 実 FRONT の curve_kink 6 件は本物の角＝辺境界（73〜127°）なので、一意な
+  // 内部辺は無い。住所を捏造せず `actual.edge` を付けないことを実データで固定する（角を Truer に潰させない）。
+  const report = checkGeometryRequest({
+    parts: [dxfPart("FRONT")],
+    checks: [{ id: "loop:FRONT", kind: "closed-loop", from: { partId: "front", pathRef: "FRONT", connectorId: "FRONT" } }]
+  });
+
+  const kinks = report.reports[0].diagnostics.filter((d) => d.code === "geometry.curve_kink");
+  assert.equal(kinks.length, 6);
+  for (const kink of kinks) {
+    assert.equal(
+      (kink.actual as { edge?: unknown }).edge,
+      undefined,
+      `corner kink at ${JSON.stringify((kink.actual as { point?: unknown }).point)} must not carry an edge address`
+    );
+  }
+});
+
+// 頂点列から最小の ASTM 風 DXF（layer 14 閉 POLYLINE）を組む。curve_kink の辺住所を end-to-end で固定する用。
+function blockDxf(name: string, vertices: ReadonlyArray<{ x: number; y: number }>): string {
+  const lines: string[] = ["0", "SECTION", "2", "BLOCKS", "0", "BLOCK", "2", name, "0", "POLYLINE", "8", "14", "70", "1"];
+  for (const vertex of vertices) {
+    lines.push("0", "VERTEX", "10", String(vertex.x), "20", String(vertex.y));
+  }
+  lines.push("0", "SEQEND", "0", "ENDBLK", "0", "ENDSEC", "0", "EOF");
+  return `${lines.join("\n")}\n`;
+}
+
+test("attaches an edge address only to a genuine in-edge kink on the DXF closed-loop path", () => {
+  // 契約（案A）: 角 A/B/C/D(>30°) と 1 つの辺内 kink M(~27°) を持つブロックを既定 tolerance で流すと、
+  // curve_kink は 5 件出るが `actual.edge` が付くのは内部 kink M ただ 1 件だけ（他は角＝住所なし）。
+  const dxf = blockDxf("PANEL", [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 60 },
+    { x: 50, y: 72 }, // 上辺の内部 kink（~27°）
+    { x: 0, y: 60 }
+  ]);
+  const report = checkGeometryRequest({
+    parts: [
+      {
+        partId: "panel",
+        geometrySource: "./panel.dxf",
+        format: "dxf" as const,
+        unit: "mm" as const,
+        scale: 1 as const,
+        paths: {},
+        geometryText: dxf
+      }
+    ],
+    checks: [{ id: "loop:PANEL", kind: "closed-loop", from: { partId: "panel", pathRef: "PANEL", connectorId: "PANEL" } }]
+  });
+
+  const kinks = report.reports[0].diagnostics.filter((d) => d.code === "geometry.curve_kink");
+  const addressed = kinks.filter((d) => (d.actual as { edge?: unknown }).edge !== undefined);
+  assert.equal(addressed.length, 1, `only the interior kink should be addressed; got ${addressed.length}`);
+
+  const edge = (addressed[0].actual as { edge: { blockName: string; edgeId: number; arcRange: [number, number]; vertexIndex?: number } }).edge;
+  const point = (addressed[0].actual as { point: { x: number; y: number } }).point;
+  assert.deepEqual(point, { x: 50, y: 72 });
+  assert.equal(edge.blockName, "PANEL");
+  assert.equal(edge.edgeId, 2); // C→M→D の辺（角 C と D の間）。
+  assert.equal(edge.vertexIndex, 1); // その辺 points [C, M, D] の M。
+  // arcRange は正規化区間で、0 <= start < end <= 1 を満たす（丸めない）。
+  assert.ok(edge.arcRange[0] >= 0 && edge.arcRange[0] < edge.arcRange[1] && edge.arcRange[1] <= 1, `arcRange ${JSON.stringify(edge.arcRange)}`);
+});
+
 // REAL_DXF の BLOCKS セクションから 1 BLOCK だけ残した DXF を作る。他ブロックの定義を落とすので、
 // 別ブロックをこのソースへ要求すると解決できず path_not_found になる = 「別ソース解決」を判別できる。
 function singleBlockDxf(dxfText: string, keepBlock: string): string {
