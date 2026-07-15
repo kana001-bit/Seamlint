@@ -57,43 +57,23 @@ CLI 表示の都合だけで field を rename しない。display-only な変更
 
 明示的な compatibility break でない限り、現在の code は安定させます。
 
-- `geometry.curve_kink`
-- `geometry.open_loop`
-- `geometry.seam_length_mismatch`
-- `geometry.ease_amount_out_of_range`
-- `geometry.gather_ratio_out_of_range`
-- `geometry.gather_source_shorter_than_target`
-- `geometry.gather_range_missing`
-- `geometry.gather_markers_inconsistent`
-- `geometry.endpoint_gap`
-- `geometry.tangent_mismatch`
-- `geometry.too_few_points`
-- `geometry.path_not_found`
-- `geometry.unsupported_svg_command`
-- `geometry.unsupported_transform`
-- `geometry.unsupported_viewbox_scale`
-- `geometry.invalid_svg_path`
-- `geometry.part_not_found`
-- `geometry.source_not_loaded`
-- `geometry.path_ref_not_found`
-- `geometry.missing_check_target`
-- `geometry.invalid_tolerance`
-- `geometry.cross_source_check_unsupported`
-- `geometry.unsupported_format`
-- `geometry.unsupported_check_kind`
-- `geometry.unsupported_unit`
-- `geometry.unsupported_scale`
-- `geometry.invalid_dxf_path`
-- `input.file_not_found`
-- `input.file_permission_denied`
-- `cli.invalid_arguments`
-- `cli.runtime_error`
+**現行 code の正本一覧は `docs/diagnostics.md`。ここに code を書き写さない。** この reference と
+`docs/diagnostics.md` の両方に一覧を持つと必ず片方が腐る（実際にこの skill は `geometry.band_*` /
+`geometry.seam_edge_*` 系を丸ごと取りこぼしていた）。この skill には「code の付け方の規約」だけを
+置き、「今ある code は何か」は `docs/diagnostics.md` を正とする。
+
+名前空間の別れ（prefix の意味）:
+
+- `geometry.*` — 幾何診断本体。rule が返す下流 contract。
+- `svg.*` — SVG export の下検分（`src/core/inspectSvgExport.ts`）。診断本体ではなく inspection 出力。
+- `input.*` / `cli.*` — 入力エラー、CLI/実行時エラー。
 
 code を追加するとき:
 
-- geometry diagnostic には `geometry.` prefix を使う。
+- geometry diagnostic には `geometry.` prefix を使う（inspection は `svg.`、入力/CLI は `input.` / `cli.`）。
 - dot の後ろは lowercase words を underscore でつなぐ。
 - wording や locale を code に含めず、ひとつの precise code を選ぶ。
+- 追加・改名・削除したら `docs/diagnostics.md` に code / severity / 意味を反映する（それが下流 contract の正）。
 
 target conventions:
 

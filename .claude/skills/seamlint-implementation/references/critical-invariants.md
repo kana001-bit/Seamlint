@@ -104,8 +104,8 @@ Seamlint は「計測して人間に見せるだけ」の道具に見えます�
   breaking change になる。
 - 守ること:
   - 明示的な compatibility break でない限り、既存 code / field 名を変えない
-    (一覧は `references/testing-diagnostics.md`)。表示だけの変更は
-    `src/diagnostics/format.ts` に閉じる。
+    (現行 code の正本一覧は `docs/diagnostics.md`、shape/severity/target の規約は
+    `references/testing-diagnostics.md`)。表示だけの変更は `src/diagnostics/format.ts` に閉じる。
   - `actual` / `expected` の数値は finite で、境界で丸めた値のみ。`NaN` / `Infinity` /
     `null` を数値フィールドに出さない。
   - `status` / diagnostic 件数 / code 名が変わる変更は final response で明記する。

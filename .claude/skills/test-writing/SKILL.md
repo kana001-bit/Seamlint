@@ -1,6 +1,6 @@
 ---
 name: test-writing
-description: "Seamlint の `test/` に node:test のテストや fixture を追加・変更するときに使う。rule / diagnostic の変更を「鳴るべき・鳴ってはいけない」の両面で固定するのが主目的。実装そのものは seamlint-implementation、差分のレビューは code-review を使う。diagnostic の code/severity の契約一覧は seamlint-implementation の testing-diagnostics reference を見る（ここでは重複させない）。"
+description: "Seamlint の `test/` に node:test のテストや fixture を追加・変更するときに使う。rule / diagnostic の変更を「鳴るべき・鳴ってはいけない」の両面で固定するのが主目的。実装そのものは seamlint-implementation、差分のレビューは code-review を使う。diagnostic の shape/severity 契約の規約は seamlint-implementation の testing-diagnostics reference、現行 code の一覧は `docs/diagnostics.md` を見る（ここでは重複させない）。"
 ---
 
 # Test Writing
@@ -17,7 +17,7 @@ description: "Seamlint の `test/` に node:test のテストや fixture を追�
 
 - 近い既存 test（`test/geometry.test.ts` / `core.test.ts` / `cli.test.ts` / `real-dxf.test.ts` / `structural-edges.test.ts` など）。
 - `references/test-conventions.md` — 配置・冒頭コメント様式・must-warn / must-not-warn の作り方。書く前に読む。
-- diagnostic の shape / code / severity 契約は `../seamlint-implementation/references/testing-diagnostics.md`。
+- diagnostic の shape / severity / code 規約は `../seamlint-implementation/references/testing-diagnostics.md`、現行 code の一覧は `docs/diagnostics.md`。
 - false positive の急所は `../seamlint-implementation/references/critical-invariants.md` の C3。
 
 ## 進め方
