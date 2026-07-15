@@ -94,6 +94,20 @@ ASTM DXF:
 - DXF path は `src/geometry/dxfPath.ts` で読む。読めない DXF path は `geometry.invalid_dxf_path`、未対応フォーマットは `geometry.unsupported_format` で明示する。
 - SVG と DXF で同じ幾何を測るとき、diagnostic の `code` / 意味は source をまたいで一貫させる。source 固有の穴（例: cross-source 比較）は黙って通さず error にする（`geometry.cross_source_check_unsupported`）。
 
+## Structural Edges（`slnt edges` は公開契約）
+
+`slnt edges <dxf> --block <name> [--json]` は DXF BLOCK の構造辺を返す **read-only の幾何
+ドキュメント**コマンド（`src/geometry/structuralEdges.ts`、CLI は `src/cli/slnt.ts`）。diagnostic
+report ではない。
+
+- 出力は `blockName` / `edges[]`（各辺 `edgeId` / `lengthMm` / `finishedLengthMm` / `arcRange` /
+  `points`）/ `perimeterMm` / `cutQuantity`。error は診断形にせず
+  `{ error: { code, message, blockName? } }` の最小 envelope で返す（呼び手は exit code で分岐）。
+- **この JSON shape は Truer が subprocess で消費する公開契約（Truer 側では A1 消費経路）。**
+  field 名・`arcRange` の意味・error envelope を、明示的な互換 break なしに rename・変更しない。
+  破るなら Truer の adapter も同時に直す前提で扱う。
+- read-only。`edges` は幾何を出すだけで pattern file を書かない（`references/critical-invariants.md` C7）。
+
 ## Dependencies
 
 現在 package には runtime dependency がありません。意味のある fragility を減らせるときだけ増やします。
