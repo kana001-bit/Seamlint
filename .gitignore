@@ -22,5 +22,8 @@ Thumbs.db
 *.swp
 *~
 
-# Local docs
-docs/
+# docs/ — 公開ドキュメントは追跡。内部の作業メモ・計画・handoff は docs/work/ に隔離してローカルのまま。
+# ツール管理の作業ノートも公開しない。
+docs/work/
+docs/task-specs/
+docs/branch/
