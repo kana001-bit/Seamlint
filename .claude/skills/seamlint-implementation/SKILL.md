@@ -12,7 +12,8 @@ Seamlint 本体の実装作業で使う skill です。`AGENTS.md` は入口だ�
 ## まず切り分ける
 
 変更対象を先に分類します。主な区分は parser（SVG / ASTM DXF）/ sampler / vector math /
-rule / core / diagnostic / CLI / examples / docs / Loomit boundary です。
+rule / core / diagnostic / structural edges（`slnt edges`）/ CLI / examples / docs /
+Loomit boundary です。
 
 ## 読むもの
 
