@@ -4,7 +4,7 @@ import { matchSharedEdge } from "../geometry/sharedEdgeSeam.ts";
 import type { SharedEdgeCandidate, SharedEdgeMatchResult } from "../geometry/sharedEdgeSeam.ts";
 import { matchBandSubrange } from "../geometry/bandSubrangeSeam.ts";
 import type { BandNeighbour, BandSubrangeMatchResult, BandSubrangeMeasure } from "../geometry/bandSubrangeSeam.ts";
-import { structuralEdges } from "../geometry/structuralEdges.ts";
+import { locateInteriorEdge, structuralEdges } from "../geometry/structuralEdges.ts";
 import type { StructuralEdge, StructuralEdgesResult } from "../geometry/structuralEdges.ts";
 import { measureRangeOnPolyline, polylineLength } from "../geometry/vector.ts";
 import { checkCurveSmoothness } from "../rules/curveSmoothness.ts";
@@ -25,6 +25,7 @@ import type {
   GeometryRequestReport,
   GeometryTarget,
   GeometryTolerance,
+  Point,
   SampledPoint
 } from "../types.ts";
 import { pointsForPath, statusForDiagnostics } from "./checkSvgPath.ts";
@@ -493,6 +494,73 @@ function addSeamEdgeAddressing(
   }
 }
 
+// DXF curve_kink 診断に、その kink 点が一意に乗る構造辺の住所 `actual.edge` を additive に足す。案A:
+// locateInteriorEdge が住所を返した（＝一意な内部 kink の）診断だけ enrich し、コーナー/ダート先端/ambiguous
+// （null）は据え置く。辺分割できないブロック（closed-loop 以外・退化）は住所を付けずに素通しする（捏造しない）。
+// SVG 経路には呼ばれない。curve_kink 以外の診断は対象外。
+function addCurveKinkAddressing(
+  diagnostics: Diagnostic[],
+  dxfText: string,
+  blockName: string,
+  angleThresholdDeg: number | undefined
+): void {
+  if (!blockName || !diagnostics.some((diagnostic) => diagnostic.code === "geometry.curve_kink")) {
+    return;
+  }
+
+  let result: StructuralEdgesResult;
+  try {
+    result = structuralEdges(dxfText, blockName);
+  } catch {
+    return; // 辺分割できなければ住所を出さない（false なアドレスを作らない）。
+  }
+
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code !== "geometry.curve_kink") {
+      continue;
+    }
+    const point = kinkPoint(diagnostic.actual);
+    if (!point) {
+      continue;
+    }
+    // curve_kink 検出と同じ角度閾値で reduced net line 上の kink 性を確かめる（tolerance.angleDeg 上書きも尊重）。
+    const location = locateInteriorEdge(
+      result,
+      point,
+      angleThresholdDeg === undefined ? {} : { kinkAngleThresholdDeg: angleThresholdDeg }
+    );
+    if (!location) {
+      continue; // コーナー/ダート先端/ambiguous → 住所なしのまま。
+    }
+    diagnostic.actual = {
+      ...(diagnostic.actual as Record<string, unknown>),
+      edge: {
+        blockName: result.blockName,
+        edgeId: location.edgeId,
+        // arcRange は住所（正規化区間）なので丸めない。他の edge-addressing と同じ扱い。
+        arcRange: location.arcRange,
+        ...(location.vertexIndex === undefined ? {} : { vertexIndex: location.vertexIndex })
+      }
+    };
+  }
+}
+
+// curve_kink 診断の actual.point を Point として安全に取り出す（無効なら undefined）。
+function kinkPoint(actual: unknown): Point | undefined {
+  if (!actual || typeof actual !== "object") {
+    return undefined;
+  }
+  const point = (actual as { point?: unknown }).point;
+  if (!point || typeof point !== "object") {
+    return undefined;
+  }
+  const { x, y } = point as { x?: unknown; y?: unknown };
+  if (typeof x !== "number" || typeof y !== "number") {
+    return undefined;
+  }
+  return { x, y };
+}
+
 function roundCandidate(candidate: SharedEdgeCandidate): SharedEdgeCandidate {
   return {
     fromEdgeId: candidate.fromEdgeId,
@@ -898,6 +966,13 @@ function checkPathByFormat(source: ResolvedGeometrySource, check: GeometryCheckS
     expectClosed: options.closed,
     angleThresholdDeg: options.angleThresholdDeg
   });
+
+  // DXF 経路の curve_kink には、その kink が一意に乗る構造辺の住所を additive に足す（seam_length_mismatch の
+  // addSeamEdgeAddressing と同じ扱い）。案A: 一意な内部 kink だけ住所を出し、コーナー/ダート先端/ambiguous は
+  // 住所なしのまま（下流 = Truer がそれを合図に自動補正を preview-only へ倒す）。SVG 経路は辺分割しないので触らない。
+  if (source.format === "dxf") {
+    addCurveKinkAddressing(diagnostics, source.text, options.path ?? "", options.angleThresholdDeg);
+  }
 
   if (options.compareTo) {
     const compareSource = options.compareGeometrySource

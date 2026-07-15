@@ -1,5 +1,6 @@
 import { DxfPathError, extractAstmCutQuantity, extractAstmNotchPoints, extractAstmPolylinePath } from "./dxfPath.ts";
 import { angleBetweenDegrees, distance, projectPointOntoPolyline, subtract } from "./vector.ts";
+import { DEFAULT_ANGLE_THRESHOLD_DEG } from "../config/defaults.ts";
 import type { Point, SampledPoint } from "../types.ts";
 
 // 構造辺（seam edge）に分割するときの既定しきい値。prototype（docs/work/c-*.mjs）で
@@ -9,6 +10,11 @@ const DEFAULT_DART_FOLD_DEG = 120; // dart 先端は path を折り返す（near
 const DEFAULT_DART_MAX_MOUTH_MM = 60; // dart の口（肩間）は実辺よりずっと短い。
 // notch が辺境界（＝構造上の角）にこれだけ近ければ、両隣の辺に属するものとして扱う。
 const DEFAULT_NOTCH_BOUNDARY_EPSILON_MM = 1e-6;
+// curve_kink の辺住所付与（locateInteriorEdge）で使う許容。診断点は 3 桁（0.001mm グリッド）に丸められて
+// 来るので、それより十分大きく、実辺長よりは十分小さい値にする。こうすると分類は常に安全側（＝住所を
+// 出さない）へ倒れ、コーナー/ダート先端を「辺の内側」と誤認して false なアドレスを作らない。
+const DEFAULT_KINK_CORNER_TOLERANCE_MM = 0.05; // これ以内で構造上の角に一致したらコーナー＝住所を出さない。
+const DEFAULT_KINK_OFFSET_TOLERANCE_MM = 0.05; // 辺の折れ線からこれ以内なら「辺上」。超えたら off-line（ダート先端等）。
 
 export interface StructuralEdgesOptions {
   cornerAngleDeg?: number;
@@ -58,6 +64,13 @@ export interface StructuralEdgesResult {
   cutQuantity: number | null; // layer 1 注記 "Cut N" 由来。band 突き合わせに使う。無ければ null。
   perimeterMm: number; // 畳んだ baseline 周長（= 各辺 lengthMm の総和）。
   edges: StructuralEdge[];
+}
+
+// locateInteriorEdge の返り値。curve_kink など「辺分割後のループ上の点」が一意に乗る構造辺の住所。
+export interface InteriorEdgeLocation {
+  edgeId: number;
+  arcRange: [number, number]; // 所属辺の正規化区間（丸めない・structuralEdges の値を素通し）。
+  vertexIndex?: number; // 一致した辺 points 内の頂点 index（許容内で見つかったときだけ）。
 }
 
 interface RawDart {
@@ -365,4 +378,96 @@ export function structuralEdges(
     perimeterMm,
     edges
   };
+}
+
+// ループ上の点（curve_kink の頂点など）を、それが一意に乗る構造辺へ解決する。Truer 依頼の「案A」:
+// 一意な辺内部の kink だけ住所を返し、次のいずれかは null を返す（＝住所を捏造しない）:
+//  - コーナー（辺境界＝2辺の共有点）… 各辺の端点＝構造上の角に許容内で一致する点。本物の角を辺内部と誤認して
+//    下流に潰させないため、住所を出さない。
+//  - ダート先端など off-line な点 … dart 先端は reduced ループから落ちているので、どの辺の折れ線からも離れる。
+//  - ambiguous … 2 辺に等距離で一意に決まらない（自己接触形状など）。
+//  - dart 肩など「raw 経路では鋭角だが reduced 構造 net line 上では直線」の点 … curve_kink は raw/sampled 経路で
+//    検出されるが、下流（Truer）が編集するのは reduced 辺。reduced 上でも閾値超の direction change を持つ点だけを
+//    真の内部 kink とみなす。dart 肩は畳み後の腰線上に乗って直線化するので、ここで除外される。
+// 案A では「住所が無いこと」自体が下流（Truer）への合図で、Truer は住所付き＝内部 kink だけ自動補正し、
+// 住所無しは preview-only に倒す（コーナー/ダート肩/ダート先端を踏まない）。
+export function locateInteriorEdge(
+  result: StructuralEdgesResult,
+  point: Point,
+  options: { cornerToleranceMm?: number; offsetToleranceMm?: number; kinkAngleThresholdDeg?: number } = {}
+): InteriorEdgeLocation | null {
+  const cornerToleranceMm = options.cornerToleranceMm ?? DEFAULT_KINK_CORNER_TOLERANCE_MM;
+  const offsetToleranceMm = options.offsetToleranceMm ?? DEFAULT_KINK_OFFSET_TOLERANCE_MM;
+  const kinkAngleThresholdDeg = options.kinkAngleThresholdDeg ?? DEFAULT_ANGLE_THRESHOLD_DEG;
+  const edges = result.edges;
+  if (edges.length === 0) {
+    return null;
+  }
+
+  // 構造上の角（各辺の端点）に許容内で一致する点は「辺の内側」ではない → 住所を出さない。
+  for (const edge of edges) {
+    if (distance(point, edge.startPoint) <= cornerToleranceMm || distance(point, edge.endPoint) <= cornerToleranceMm) {
+      return null;
+    }
+  }
+
+  // 各辺の折れ線へ射影し、最小 offset の辺を owner 候補にする。offset が許容を超える点は辺上に無い
+  // （ダート先端など）。二番目に近い辺との offset 差が許容以内なら等距離＝一意に決まらない（ambiguous）。
+  const offsets = edges.map((edge) => {
+    const projection = projectPointOntoPolyline(edge.points, point);
+    return projection ? projection.offsetMm : Number.POSITIVE_INFINITY;
+  });
+
+  let bestEdgeId = 0;
+  for (let edgeId = 1; edgeId < offsets.length; edgeId += 1) {
+    if (offsets[edgeId] < offsets[bestEdgeId]) {
+      bestEdgeId = edgeId;
+    }
+  }
+
+  const bestOffsetMm = offsets[bestEdgeId];
+  if (!(bestOffsetMm <= offsetToleranceMm)) {
+    return null; // どの辺の折れ線からも離れている（reduced ループ外）→ 住所なし。
+  }
+  const secondBestOffsetMm = Math.min(...offsets.filter((_, edgeId) => edgeId !== bestEdgeId));
+  if (secondBestOffsetMm - bestOffsetMm <= offsetToleranceMm) {
+    return null; // 2 辺に等距離で一意に決まらない → 住所なし。
+  }
+
+  const owner = edges[bestEdgeId];
+  const vertexIndex = nearestVertexIndex(owner.points, point, cornerToleranceMm);
+  // reduced 辺の頂点に一致し、そこでなお閾値超の kink である点だけを住所付きにする。頂点に一致しない
+  // （interpolated 曲線など）／端点（角）／reduced では直線（dart 肩など）は、真の内部 kink とみなさず住所なし。
+  if (vertexIndex === null || vertexIndex <= 0 || vertexIndex >= owner.points.length - 1) {
+    return null;
+  }
+  const reducedTurnDeg = angleBetweenDegrees(
+    subtract(owner.points[vertexIndex], owner.points[vertexIndex - 1]),
+    subtract(owner.points[vertexIndex + 1], owner.points[vertexIndex])
+  );
+  if (!(reducedTurnDeg > kinkAngleThresholdDeg)) {
+    return null; // reduced 構造 net line 上では kink ではない → 住所なし。
+  }
+
+  return {
+    edgeId: bestEdgeId,
+    // arcRange は住所（正規化区間）なので丸めない。structuralEdges の値を素通しする。
+    arcRange: [owner.arcRange[0], owner.arcRange[1]],
+    vertexIndex
+  };
+}
+
+// 点に許容内で一致する辺頂点の index。curve_kink は net line の頂点なので、通常その辺の points の
+// いずれかに一致する。見つからなければ null（住所は arcRange だけで成立する）。
+function nearestVertexIndex(points: readonly Point[], point: Point, toleranceMm: number): number | null {
+  let bestIndex = -1;
+  let bestDistanceMm = toleranceMm;
+  for (let index = 0; index < points.length; index += 1) {
+    const distanceMm = distance(points[index], point);
+    if (distanceMm <= bestDistanceMm) {
+      bestDistanceMm = distanceMm;
+      bestIndex = index;
+    }
+  }
+  return bestIndex >= 0 ? bestIndex : null;
 }
