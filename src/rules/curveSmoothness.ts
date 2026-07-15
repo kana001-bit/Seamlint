@@ -1,4 +1,5 @@
 import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.ts";
+import { DEFAULT_ANGLE_THRESHOLD_DEG, DEFAULT_CLOSED_ENDPOINT_THRESHOLD_MM } from "../config/defaults.ts";
 import type { Diagnostic, Point, SampledPoint } from "../types.ts";
 
 interface CurveSmoothnessOptions {
@@ -13,8 +14,8 @@ export function checkCurveSmoothness(
   options: CurveSmoothnessOptions = {}
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
-  const angleThresholdDeg = options.angleThresholdDeg ?? 25;
-  const closedEndpointThresholdMm = options.closedEndpointThresholdMm ?? 0.5;
+  const angleThresholdDeg = options.angleThresholdDeg ?? DEFAULT_ANGLE_THRESHOLD_DEG;
+  const closedEndpointThresholdMm = options.closedEndpointThresholdMm ?? DEFAULT_CLOSED_ENDPOINT_THRESHOLD_MM;
   const target = options.target ?? "path";
 
   if (points.length < 3) {
