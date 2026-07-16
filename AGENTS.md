@@ -6,6 +6,14 @@ Every tool that reads agent instructions (Claude Code, Codex, Cursor, other agen
 
 Keep this file thin and always-on. Detailed working rules live in `.claude/skills/`; read only the skill and reference you need for the change in front of you.
 
+## Seamlint とは (1 行)
+
+型紙 path の生ジオメトリを測り、confidently-wrong な寸法を検出する **read-only geometry linter**。
+検査だけを担当し、線の書き換えは Truer に渡す。
+
+> **Geometry source は ASTM DXF が primary、SVG は limited support**（SVG→DXF pivot、`docs/design-history.md`）。
+> 既定で 1 user unit = 1 mm、`scale` = 1。この pivot 前提の正本はここ（reference には複製しない）。
+
 ## Working principles
 
 - Read before you write. Confirm existing code, contracts, and docs before changing them.
@@ -65,7 +73,8 @@ Use only the reference inside a skill that the current change needs.
 - Seamlint is a read-only geometry linter. Do not add auto-fix or CAD editing behavior unless the user explicitly asks for a design change.
 - Keep rule evaluation separate from CLI display and exit status. Rules return structured diagnostics; formatters and the CLI render them.
 - Treat `code`, `target`, `severity`, `actual`, `expected`, and `suggestion` as downstream contract fields. Do not casually rename them.
-- Geometry sources are SVG and ASTM DXF. Unless the task is explicitly about unit support, treat coordinates as `mm` and `scale` as `1`. The MVP SVG parser stays limited to `M`, `L`, `H`, `V`, `C`, `Q`, and `Z`.
+- Geometry sources are ASTM DXF (primary) and SVG (limited support). Unless the task is explicitly about unit support, treat coordinates as `mm` and `scale` as `1`. The MVP SVG parser stays limited to `M`, `L`, `H`, `V`, `C`, `Q`, and `Z`.
+- No `any` type. Use `unknown` for genuinely-unknown values and narrow at the use site; `unknown` needs no comment at untrusted-input boundaries and in `catch`, but other intentional `unknown` gets a one-line reason. `T | undefined` unions are the recommended, honest way to express absence — no comment needed. Detail: `.claude/skills/seamlint-implementation/references/implementation-rules.md`.
 - Keep work notes short, factual, and dated. Prefer appending progress over rewriting history.
 
 ## Reading order
