@@ -34,6 +34,18 @@ process.stderr.write(text);
 
 Rule は file path ではなく、points または domain object を受け取ります。CLI は file を読み、それを rule input に変換してよい。
 
+## Type Hygiene（`any` / `unknown` / `undefined`）
+
+型の緩みは silent なバグの温床。計測値が物理寸法として下流へ流れる以上、ここも急所です。
+
+- **`any` 型は使わない。** 型が本当に不明なら `unknown` を使い、**使用箇所で必ず絞り込む**。
+- **`unknown` は「信頼できない入力の境界」と「catch した `error`」に限り、コメント無しで可。**
+  現行コードの既定パターン: `coerceRequest(value: unknown)` と外部 JSON の narrowing キャスト、
+  `catch (error: unknown)`、diagnostic の `expected?` / `actual?: unknown` 契約フィールド。
+- それ以外の意図的な `unknown` は、理由を 1 行コメントで添える。`T | undefined` のユニオン型は
+  不在を正直に表す型として推奨（コメント不要）。
+- 現状 src の `any` 型はゼロ（"any" の出現は error メッセージ内の英単語のみ）。この状態を保つ。
+
 ## Read-Only Semantics
 
 Seamlint は pattern file を変更せず、geometry risk を説明します。
