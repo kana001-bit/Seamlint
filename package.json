@@ -26,6 +26,7 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "pretest": "npm run typecheck && npm run build",
     "test": "node --test",
+    "lint": "eslint .",
     "prepare": "npm run build",
     "check:sample": "node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole",
     "check:sample-json": "node ./src/cli/slnt.ts check ./examples/armhole-kink.svg --path body-armhole --json",
@@ -37,7 +38,10 @@
     "check:open-loop-json": "node ./src/cli/slnt.ts check ./examples/open-loop.svg --path neckline-loop --closed --json"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.0",
-    "typescript": "^6.0.3"
+    "eslint": "^10.7.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0"
   }
 }
