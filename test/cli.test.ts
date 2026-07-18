@@ -120,6 +120,24 @@ test("reports missing SVG path as JSON diagnostic", () => {
   assert.equal(report.diagnostics[0].code, "geometry.path_not_found");
 });
 
+test("reports a missing input file as input.file_not_found in JSON mode", () => {
+  // 仕様保護: 存在しないファイルは生の ENOENT crash ではなく input.file_not_found の構造化 report にして、
+  // Loomit が表示・分岐できるようにする（stderr を汚さず JSON を stdout に返す）。
+  const result = runSlnt([
+    "check",
+    "./test/fixtures/does-not-exist.svg",
+    "--path",
+    "body-armhole",
+    "--json"
+  ]);
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "input.file_not_found");
+});
+
 test("reports unsupported SVG commands as JSON diagnostic", () => {
   // 仕様保護: JSON モードは、parser の失敗を機械可読なまま保つ。
   const result = runSlnt([

@@ -270,6 +270,31 @@ test("seam-edge resolves the real front<->back to the outseam once the connector
   assert.equal(actual?.toEdge?.edgeId, 1);
 });
 
+test("seam-edge reports no-length-match when the two parts share no edge of matching length", () => {
+  // 仕様保護（配線）: 両側に辺はあるが finished 長が許容内で一致しない＝ここでは縫い合わない。matcher の
+  // no-length-match が checkGeometryRequest 経由で geometry.seam_edge_no_match の error になることを固定する。
+  // FROM 200×30 と TO 400×55 は、どの辺ペアも 5% 許容外（200/400, 30/55…）なので一致候補ゼロ。
+  const from = buildBlockDxf("FROM", [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 30 }, { x: 0, y: 30 }]);
+  const to = buildBlockDxf("TO", [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 55 }, { x: 0, y: 55 }]);
+
+  const report = checkGeometryRequest(seamEdgeRequest(from, "FROM", to, "TO"));
+
+  const check = report.reports[0];
+  assert.equal(check.status, "error");
+  assert.equal(check.diagnostics.some((d) => d.code === "geometry.seam_edge_no_match"), true);
+});
+
+test("seam-edge reports no-notch-match when the declared notch count fits no candidate edge", () => {
+  // 仕様保護（配線）: notch 署名が実データと食い違う（どの長さ候補辺もその数の notch を持たない）と、黙って
+  // 通さず matcher の no-notch-match が geometry.seam_edge_no_notch_match の error になることを固定する。
+  // 実 FRONT↔BACK の共有辺（outseam 4 / inseam 0 / waist 0）に「9 notch」の辺は無いので署名が合わない。
+  const report = checkGeometryRequest(seamEdgeRequest(KNICKERS_DXF, "FRONT", KNICKERS_DXF, "BACK", 9));
+
+  const check = report.reports[0];
+  assert.equal(check.status, "error");
+  assert.equal(check.diagnostics.some((d) => d.code === "geometry.seam_edge_no_notch_match"), true);
+});
+
 // ---- edge-addressing bridge（Truer 向け）: seam_length_mismatch に辺住所を載せる ----
 
 // sewn-seam（whole-path 比較）の request。seam-edge と違い structuralEdges を通らない＝辺住所を持たない経路。

@@ -7,6 +7,7 @@ import { samplePath } from "../src/geometry/samplePath.ts";
 import { assertSupportedUnitScale, parseSvgPathData } from "../src/geometry/svgPath.ts";
 import { measureRangeOnPolyline, polylineLength, projectPointOntoPolyline } from "../src/geometry/vector.ts";
 import { checkCurveSmoothness } from "../src/rules/curveSmoothness.ts";
+import { checkEndpointTangentCompatibility } from "../src/rules/endpointTangentCompatibility.ts";
 import { checkSeamLengthCompatibility } from "../src/rules/seamLengthCompatibility.ts";
 
 const ASTM_DXF = readFileSync(new URL("./fixtures/astm-layer14-blocks.dxf", import.meta.url), "utf8");
@@ -802,5 +803,59 @@ test("checks the closing angle of closed paths", () => {
         diagnostic.code === "geometry.curve_kink" &&
         (diagnostic.actual as { point: { x: number } }).point.x === 0
     )
+  );
+});
+
+test("does not flag a gently curving open path as a kink under the default threshold", () => {
+  // 仕様保護（鳴ってはいけない側 / C3）: 各方向転換が閾値(25°)未満の緩い曲線では curve_kink を出さない。
+  // 実コーナー・閉じ角が鳴る側は別テストで固定済み。ここは意図した滑らかな線で false positive を出さないことを守る。
+  const gentleArc = [
+    { x: 0, y: 0 },
+    { x: 20, y: 5 },
+    { x: 40, y: 8 },
+    { x: 60, y: 9 },
+    { x: 80, y: 9 }
+  ];
+
+  assert.deepEqual(checkCurveSmoothness(gentleArc, { target: "gentle", angleThresholdDeg: 25 }), []);
+});
+
+test("reports too few points for smoothness checks", () => {
+  // 仕様保護: smoothness 判定には最低 3 sampled points 必要。点不足は壊れた測定でなく error diagnostic にする。
+  assert.deepEqual(checkCurveSmoothness([{ x: 0, y: 0 }, { x: 10, y: 0 }], { target: "short" }), [
+    {
+      severity: "error",
+      code: "geometry.too_few_points",
+      target: "short",
+      message: "The path has too few sampled points to check smoothness.",
+      expected: { minPoints: 3 },
+      actual: { points: 2 }
+    }
+  ]);
+});
+
+test("passes a genuinely smooth join with no endpoint gap or tangent diagnostics", () => {
+  // 仕様保護（鳴ってはいけない側 / C3）: 端点が接し接線も揃う join は endpoint_gap も tangent_mismatch も出さない。
+  // smooth-continuation の鳴る側（endpoint-gap / smooth-join example）は別テストで固定済み。ここは通る側を守る。
+  const from = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+  const to = [{ x: 10, y: 0 }, { x: 20, y: 0 }];
+
+  assert.deepEqual(checkEndpointTangentCompatibility(from, to, { target: "from/to" }), []);
+});
+
+test("reports too few points for endpoint/tangent checks", () => {
+  // 仕様保護: endpoint/tangent 判定には両側とも最低 2 sampled points 必要。点不足は error diagnostic にする。
+  assert.deepEqual(
+    checkEndpointTangentCompatibility([{ x: 0, y: 0 }], [{ x: 0, y: 0 }, { x: 10, y: 0 }], { target: "a/b" }),
+    [
+      {
+        severity: "error",
+        code: "geometry.too_few_points",
+        target: "a/b",
+        message: "Both paths need at least two sampled points to compare endpoints and tangents.",
+        expected: { minPointsEach: 2 },
+        actual: { fromPoints: 1, toPoints: 2 }
+      }
+    ]
   );
 });
