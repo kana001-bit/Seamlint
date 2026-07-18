@@ -1729,6 +1729,286 @@ EOF
   assert.equal(report.diagnostics[0].target, "body.armhole");
 });
 
+test("rejects a part declared in a non-mm unit instead of measuring it", () => {
+  // 仕様保護: unit は宣言の検査（安全境界）。mm 以外の part を黙って測らず geometry.unsupported_unit にする。
+  // 座標が別 unit のまま cross-source 比較へ流れ込む confidently-wrong を入口で止める。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "cm",
+        scale: 1,
+        paths: { armhole: "#straight" }
+      }
+    ],
+    checks: [
+      {
+        id: "closed-armhole",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_unit");
+  assert.equal(report.diagnostics[0].target, "body");
+});
+
+test("rejects a part declared at a non-unit scale instead of measuring it", () => {
+  // 仕様保護: scale も宣言の検査。scale 1 以外の part を黙って測らず geometry.unsupported_scale にする。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 2,
+        paths: { armhole: "#straight" }
+      }
+    ],
+    checks: [
+      {
+        id: "closed-armhole",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_scale");
+  assert.equal(report.diagnostics[0].target, "body");
+});
+
+test("reports a pair check that is missing its target instead of measuring one side", () => {
+  // 仕様保護: pair が必要な check（sewn-seam 等）に to が無ければ、片側だけを黙って測らず missing_check_target。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#straight" }
+      }
+    ],
+    checks: [
+      {
+        id: "armhole-length",
+        kind: "sewn-seam",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.missing_check_target");
+  assert.equal(report.diagnostics[0].target, "body.armhole");
+});
+
+test("reports a check that references a part not present in the request", () => {
+  // 仕様保護: check が参照する part が parts に無ければ、source 欠落のように見せず geometry.part_not_found。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#straight" }
+      }
+    ],
+    checks: [
+      {
+        id: "closed-armhole",
+        kind: "closed-loop",
+        from: { partId: "ghost", pathRef: "armhole", connectorId: "armhole" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.part_not_found");
+  assert.equal(report.diagnostics[0].target, "ghost.armhole");
+});
+
+test("reports a blank path reference on an SVG part as path_ref_not_found", () => {
+  // 仕様保護: connector が空の path を宣言（pathRef が空文字に解決）したら、黙って測らず geometry.path_ref_not_found。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "" }
+      }
+    ],
+    checks: [
+      {
+        id: "closed-armhole",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.path_ref_not_found");
+  assert.equal(report.diagnostics[0].target, "body.armhole");
+});
+
+test("reports an unsupported check kind instead of silently doing nothing", () => {
+  // 仕様保護: MVP adapter 未対応の kind（overlap 等）は、黙って no-op にせず geometry.unsupported_check_kind。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#straight" }
+      },
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" }
+      }
+    ],
+    checks: [
+      {
+        id: "overlap-check",
+        kind: "overlap" as never,
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
+        to: { partId: "sleeve", pathRef: "cap", connectorId: "cap" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_check_kind");
+  assert.equal(report.diagnostics[0].target, "body.armhole/sleeve.cap");
+});
+
+test("maps malformed SVG path data to invalid_svg_path rather than an unclassified error", () => {
+  // 仕様保護: 未完成の SVG path data（"M 0 0 L"）は parse で throw する。既知の transform/viewbox/command 以外の
+  // parse エラーは geometry.invalid_svg_path に写して機械可読に保つ（svgPathErrorCode の default 分岐）。
+  const brokenSvg = `<svg xmlns="http://www.w3.org/2000/svg"><path id="broken" d="M 0 0 L" /></svg>`;
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { armhole: "#broken" }
+      }
+    ],
+    checks: [
+      {
+        id: "closed-armhole",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "armhole", connectorId: "armhole" }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": brokenSvg }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.invalid_svg_path");
+  assert.equal(report.diagnostics[0].target, "body.armhole");
+});
+
+test("honours a snake_case angle_deg tolerance on a request-level closed-loop check", () => {
+  // 仕様保護（snake_case 契約）: request は Loomit documented YAML の snake_case tolerance を受ける。angle_deg を
+  // 尊重していれば、角のある閉ループでも閾値 179° で curve_kink を抑止できる（無視されれば既定 25° で鳴る）。
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg"><path id="tri" d="M 0 0 L 40 0 L 40 40 Z" /></svg>`;
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { edge: "#tri" }
+      }
+    ],
+    checks: [
+      {
+        id: "loop",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "edge", connectorId: "edge" },
+        tolerance: { angle_deg: 179 }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": svg }
+  });
+
+  assert.equal(report.status, "ok");
+  assert.deepEqual(report.diagnostics, []);
+});
+
+test("honours snake_case endpoint_mm and tangent_deg on a request-level smooth-continuation check", () => {
+  // 仕様保護（snake_case 契約）: request は endpoint_mm / tangent_deg も snake_case で受ける。両方を尊重していれば、
+  // 隙間 ~2.8mm・角 ~22° の join でも十分ゆるい許容で通る（片方でも無視されれば endpoint_gap / tangent_mismatch が鳴る）。
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg">
+    <path id="upper" d="M 0 0 L 10 0" />
+    <path id="lower" d="M 12 2 L 22 6" />
+  </svg>`;
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { upper: "#upper", lower: "#lower" }
+      }
+    ],
+    checks: [
+      {
+        id: "smooth",
+        kind: "smooth-continuation",
+        from: { partId: "body", pathRef: "upper", connectorId: "upper" },
+        to: { partId: "body", pathRef: "lower", connectorId: "lower" },
+        tolerance: { endpoint_mm: 5, tangent_deg: 45 }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": svg }
+  });
+
+  assert.equal(report.status, "ok");
+  assert.deepEqual(report.diagnostics, []);
+});
+
 test("reports DXF seams when more than one layer 1 outline encloses the same layer 14 seam", () => {
   // 仕様保護: 複数の layer 1 外形候補があるときは、裁断線を推測せず明示エラーで止める。
   const dxfText = `
