@@ -152,7 +152,7 @@ SVG path をサンプリングした点列（`SampledPoint[]`）を返す下位�
 ## `structuralEdges(dxfText, blockName, options?)`
 
 ASTM DXF の 1 BLOCK を、周回順の **構造辺（seam edge）** に分割して返す。角で辺境界を割り、dart は
-先端を落として畳み込み、layer 4 notch を各辺へ射影する。下流（Truer）が診断の辺住所
+先端を落として畳み込み、ASTM notch（layer 4/80/81/82/83 = V/T/castle/check/U の全種別）を各辺へ射影する。下流（Truer）が診断の辺住所
 （`blockName` / `edgeId` / `arcRange`）から **辺の実ジオメトリ** を引いて、seam overlay を描いたり
 edge digest を取ったりするための正本。CLI からは [`slnt edges`](cli.md) が同じ結果を JSON で出す。
 
@@ -180,7 +180,7 @@ interface StructuralEdge {
   finishedLengthMm: number; // dart を縫い閉じた後の長さ（= 隣辺と突き合わせる量）。
   arcRange: [number, number]; // ループ上の正規化区間 [start, end]（最初の角を原点・0..1・start < end）。
   darts: StructuralDart[]; // この辺へ畳み込んだ dart（無ければ空）。
-  notches: StructuralNotch[]; // この辺へ射影された layer 4 notch。
+  notches: StructuralNotch[]; // この辺へ射影された ASTM notch（layer 4/80/81/82/83 の全種別）。
 }
 ```
 
