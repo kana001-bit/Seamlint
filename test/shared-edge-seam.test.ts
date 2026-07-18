@@ -243,10 +243,11 @@ test("seam-edge defers a real front<->back pair that shares two seams (outseam +
   );
 });
 
-test("seam-edge resolves the real front<->back to the outseam once the connector declares notchCount=2", () => {
+test("seam-edge resolves the real front<->back to the outseam once the connector declares notchCount=4", () => {
   // 仕様保護（②の実データ核心）: notch 署名を付けると、ambiguous だった FRONT↔BACK が outseam に一意解決する。
-  // outseam だけ notch 2個（front[0.061,0.246]≈back[0.062,0.248]）、inseam/waist は 0個なので notchCount=2 で割れる。
-  const report = checkGeometryRequest(seamEdgeRequest(KNICKERS_DXF, "FRONT", KNICKERS_DXF, "BACK", 2));
+  // outseam だけ notch 4個（V2+T2。front[0.061,0.172,0.246,0.877]≈back[0.062,0.174,0.248,0.876]）、
+  // inseam/waist は 0個なので notchCount=4 で割れる（layer 4 だけなら 2 だが、5 レイヤ対応で T も勘定に入る）。
+  const report = checkGeometryRequest(seamEdgeRequest(KNICKERS_DXF, "FRONT", KNICKERS_DXF, "BACK", 4));
 
   const check = report.reports[0];
   // 解決に成功（ambiguous / no-notch-match の error ではない）。outseam は front 814.6 / back 806.7 で 7.9mm 差＝
@@ -255,13 +256,13 @@ test("seam-edge resolves the real front<->back to the outseam once the connector
   assert.equal(check.diagnostics.some((d) => d.code === "geometry.seam_edge_ambiguous"), false);
   const matched = check.diagnostics.find((d) => d.code === "geometry.seam_edge_matched");
   assert.ok(matched, "should resolve and emit seam_edge_matched");
-  // matched した辺は outseam（finished ~815mm・notch 2個）で、外周でも inseam(552) でも waist(165) でもない。
+  // matched した辺は outseam（finished ~815mm・notch 4個）で、外周でも inseam(552) でも waist(165) でもない。
   type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
   const actual = matched?.actual as
     | { fromFinishedMm: number; fromNotchFractions: number[]; fromEdge?: EdgeAddr; toEdge?: EdgeAddr }
     | undefined;
   assert.ok((actual?.fromFinishedMm ?? 0) > 780 && (actual?.fromFinishedMm ?? 0) < 840, `outseam length ${actual?.fromFinishedMm}`);
-  assert.equal(actual?.fromNotchFractions.length, 2);
+  assert.equal(actual?.fromNotchFractions.length, 4);
   // seam_edge_matched も機械可読な辺住所を持つ（seam_length_mismatch と同形・Truer bridge）。outseam は両側 edgeId 1。
   assert.equal(actual?.fromEdge?.blockName, "FRONT");
   assert.equal(actual?.fromEdge?.edgeId, 1);
@@ -285,8 +286,8 @@ function sewnSeamRequest(fromDxf: string, fromBlock: string, toDxf: string, toBl
 test("seam-edge carries machine-readable edge addressing on a length mismatch (Truer bridge)", () => {
   // 仕様保護（edge-addressing bridge）: DXF seam-edge の seam_length_mismatch は、下流(Truer)が診断→編集対象の辺を
   // 再導出せずに ProposalTarget/SeamEdge へ解決できるよう、両辺の住所 { blockName, edgeId, arcRange } を actual に
-  // additive で載せる。notchCount=2 で outseam に解決＝FRONT/BACK とも edgeId 1（814.6/806.7、7.8mm差 > 3mm）で mismatch。
-  const report = checkGeometryRequest(seamEdgeRequest(KNICKERS_DXF, "FRONT", KNICKERS_DXF, "BACK", 2));
+  // additive で載せる。notchCount=4 で outseam に解決＝FRONT/BACK とも edgeId 1（814.6/806.7、7.8mm差 > 3mm）で mismatch。
+  const report = checkGeometryRequest(seamEdgeRequest(KNICKERS_DXF, "FRONT", KNICKERS_DXF, "BACK", 4));
 
   const mismatch = report.reports[0].diagnostics.find((d) => d.code === "geometry.seam_length_mismatch");
   assert.ok(mismatch, "expected a seam_length_mismatch on the outseam");

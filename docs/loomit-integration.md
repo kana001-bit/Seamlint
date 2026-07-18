@@ -104,6 +104,10 @@ interface GeometryRequestReport {
 - **`seam-edge` / `band-seam` は DXF 専用**（structuralEdges で辺分割するため。SVG は辺分割不可）。どちらも
   Loomit は「どの辺か」を渡さない — 辺は Seamlint が幾何から発見する（seam-edge=長さ＋notch 署名、band-seam=
   各 neighbour の dart 畳み辺）。
+- **`edgeSignature.notchCount` は「その辺に乗る全 ASTM notch 種別の合計」を数える** — V/スリット(layer 4)だけ
+  でなく T(80)・castle(81)・check(82)・U(83) も勘定に入れる。Seamlint は 5 レイヤすべての notch を数えて
+  `notchCount` と**厳密一致**で照合するため、V だけ数えると T 等を持つ seam で数が食い違い、実共有辺が
+  `no-notch-match` に落ちて解決できない（例: cycling-knickers の outseam は V2+T2 = **4**、2 ではない）。
 - **`band-seam` は N-ary**。`from` にバンド（contiguous side が singleton の側）、`neighbours` にもう一方の
   side の各ピースを BLOCK target で並べる。**裁断枚数は渡さない** — Seamlint が各 part の DXF layer-1 "Cut N"
   から読む。per-neighbour の notch_count や辺 id は不要。

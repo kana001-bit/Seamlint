@@ -216,6 +216,73 @@ test("the notch/cut-quantity helpers reject a missing block instead of failing s
   assert.equal(extractAstmCutQuantity(plain, "A"), null);
 });
 
+// レイヤ指定で POINT を置ける DXF ビルダ（buildBlockDxf は layer 4 固定なので、レイヤフィルタ検証用に別途用意）。
+function buildBlockDxfWithLayeredPoints(
+  blockName: string,
+  vertices: readonly Point[],
+  points: readonly { layer: string; x: number; y: number }[]
+): string {
+  const lines: string[] = ["0", "SECTION", "2", "BLOCKS", "0", "BLOCK", "2", blockName];
+  for (const p of points) {
+    lines.push("0", "POINT", "8", p.layer, "10", String(p.x), "20", String(p.y));
+  }
+  lines.push("0", "POLYLINE", "8", "14", "70", "1");
+  for (const vertex of vertices) {
+    lines.push("0", "VERTEX", "10", String(vertex.x), "20", String(vertex.y));
+  }
+  lines.push("0", "SEQEND", "0", "ENDBLK", "0", "ENDSEC", "0", "EOF");
+  return `${lines.join("\n")}\n`;
+}
+
+test("extractAstmNotchPoints reads all five ASTM notch layers (4/80/81/82/83), not just layer 4", () => {
+  // 仕様保護（本ブランチの核）: ASTM は notch を形状ごとに別レイヤへ書く。V/スリット=4, T=80, castle=81,
+  // check=82, U=83。layer 4 だけ読むと T/castle/check/U を silent に取りこぼす。5 レイヤ全部拾うこと。
+  const square: Point[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 }
+  ];
+  const dxf = buildBlockDxfWithLayeredPoints("A", square, [
+    { layer: "4", x: 10, y: 0 },
+    { layer: "80", x: 20, y: 0 },
+    { layer: "81", x: 30, y: 0 },
+    { layer: "82", x: 40, y: 0 },
+    { layer: "83", x: 50, y: 0 }
+  ]);
+
+  const notches = extractAstmNotchPoints(dxf, "A");
+  assert.equal(notches.length, 5);
+  assert.deepEqual(
+    notches.map((n) => n.x).sort((a, b) => a - b),
+    [10, 20, 30, 40, 50]
+  );
+});
+
+test("extractAstmNotchPoints excludes the QA duplicate layers (84-87) and anchor/turn layers (2/3)", () => {
+  // 仕様保護（境界）: 84-87 は notch ではなく品質検証用の複製曲線（境界/内部線/内部くり抜き/縫い線）、
+  // layer 2/3 は anchor/turn 用の POINT。どれも notch として拾ってはいけない。混ぜると数が狂う。
+  const square: Point[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 }
+  ];
+  const dxf = buildBlockDxfWithLayeredPoints("A", square, [
+    { layer: "4", x: 10, y: 0 }, // これだけ notch
+    { layer: "84", x: 60, y: 0 },
+    { layer: "85", x: 61, y: 0 },
+    { layer: "86", x: 62, y: 0 },
+    { layer: "87", x: 63, y: 0 },
+    { layer: "2", x: 70, y: 0 },
+    { layer: "3", x: 71, y: 0 }
+  ]);
+
+  const notches = extractAstmNotchPoints(dxf, "A");
+  assert.equal(notches.length, 1);
+  assert.deepEqual(notches[0], { x: 10, y: 0 });
+});
+
 const WAIST_DXF = readFileSync(new URL("./fixtures/real-waist-astm.dxf", import.meta.url), "utf8");
 const KNICKERS_DXF = readFileSync(new URL("./fixtures/real-cycling-knickers-astm.dxf", import.meta.url), "utf8");
 
@@ -247,12 +314,15 @@ test("collapses the real darted waist and surfaces the outseam notches on cyclin
   // 口を閉じた仕上がりは net line より短い。
   assert.ok(dartedEdges[0].finishedLengthMm < dartedEdges[0].lengthMm);
 
-  // 脇線（最長辺 ~815mm）に layer-4 notch が 2 つ、腰角から ~0.06 / ~0.25 の位置で乗る。
+  // 脇線（最長辺 ~815mm）に notch が計 4 つ乗る。腰角から ~0.06 / ~0.25 は layer 4(V/スリット)、
+  // ~0.17 / ~0.88 は layer 80(T)。5 レイヤ対応で T も拾うようになり 2→4 に増えた。
   const outseam = front.edges.slice().sort((a, b) => b.lengthMm - a.lengthMm)[0];
-  assert.equal(outseam.notches.length, 2);
+  assert.equal(outseam.notches.length, 4);
   const fracs = outseam.notches.map((notch) => notch.edgePosition).sort((a, b) => a - b);
   assert.ok(Math.abs(fracs[0] - 0.061) < 0.02, `notch1 frac ${fracs[0]}`);
-  assert.ok(Math.abs(fracs[1] - 0.246) < 0.02, `notch2 frac ${fracs[1]}`);
+  assert.ok(Math.abs(fracs[1] - 0.172) < 0.02, `notch2 frac ${fracs[1]}`);
+  assert.ok(Math.abs(fracs[2] - 0.246) < 0.02, `notch3 frac ${fracs[2]}`);
+  assert.ok(Math.abs(fracs[3] - 0.877) < 0.02, `notch4 frac ${fracs[3]}`);
 });
 
 test("front and back outseam notches correspond at matching fractions from the shared waist corner", () => {
@@ -266,9 +336,10 @@ test("front and back outseam notches correspond at matching fractions from the s
   const front = outseamOf("FRONT").notches.map((n) => n.edgePosition).sort((a, b) => a - b);
   const back = outseamOf("BACK").notches.map((n) => n.edgePosition).sort((a, b) => a - b);
 
-  assert.equal(front.length, 2);
-  assert.equal(back.length, 2);
-  for (let i = 0; i < 2; i += 1) {
+  // layer 4(V)+80(T) の 4 点が、front/back とも同じ辺内位置に来る（V も T も対応する）。
+  assert.equal(front.length, 4);
+  assert.equal(back.length, 4);
+  for (let i = 0; i < 4; i += 1) {
     assert.ok(Math.abs(front[i] - back[i]) < 0.01, `notch#${i} front ${front[i]} vs back ${back[i]}`);
   }
 });
