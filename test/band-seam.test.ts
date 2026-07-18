@@ -183,6 +183,61 @@ test("band-seam errors when a neighbour has no uniquely darted band edge, pointi
   assert.equal((unresolved?.actual as { dartedEdgeCount: number }).dartedEdgeCount, 0);
 });
 
+test("band-seam reports a neighbour that references a part not present in the request", () => {
+  // 仕様保護（N-ary 配線）: neighbour 参照が parts に無ければ、集約でも band でもなく当該 neighbour を target に
+  // geometry.part_not_found で surface する。Loomit handoff の壊れ方（隣接ピースの取り違え）を機械可読にする。
+  const band: BandPart = { partId: "band", dxf: buildBlockDxf("BAND", rectBand(160, 20), ["Fabric, Cut 1"]), block: "BAND" };
+  const request: GeometryCheckRequest = {
+    parts: [dxfPart(band.partId, band.dxf, band.block)],
+    checks: [
+      {
+        id: "band-seam:test",
+        kind: "band-seam",
+        from: { partId: "band", pathRef: "seam" },
+        neighbours: [{ partId: "ghost", pathRef: "seam" }]
+      }
+    ]
+  };
+
+  const report = checkGeometryRequest(request).reports[0];
+  assert.equal(report.status, "error");
+  const missing = report.diagnostics.find((d) => d.code === "geometry.part_not_found");
+  assert.ok(missing, "should emit part_not_found for the missing neighbour");
+  assert.equal(missing?.target, "ghost.seam");
+});
+
+test("band-seam reports a neighbour whose path reference is blank as path_ref_not_found", () => {
+  // 仕様保護（N-ary 配線）: neighbour の path が空文字に解決されたら、黙って測らず当該 neighbour を target に
+  // geometry.path_ref_not_found。band 側の path 解決（from）と同じ検査を各 neighbour にも掛けていることを守る。
+  const band: BandPart = { partId: "band", dxf: buildBlockDxf("BAND", rectBand(160, 20), ["Fabric, Cut 1"]), block: "BAND" };
+  const neighbourPart: GeometryPartRef = {
+    partId: "front",
+    geometrySource: "front.dxf",
+    format: "dxf",
+    unit: "mm",
+    scale: 1,
+    paths: { seam: "" }, // connector が空の path を宣言 → pathIdFor が空文字 → path_ref_not_found。
+    geometryText: buildBlockDxf("FRONT", dartPanel(), ["Lining, Cut 1"])
+  };
+  const request: GeometryCheckRequest = {
+    parts: [dxfPart(band.partId, band.dxf, band.block), neighbourPart],
+    checks: [
+      {
+        id: "band-seam:test",
+        kind: "band-seam",
+        from: { partId: "band", pathRef: "seam" },
+        neighbours: [{ partId: "front", pathRef: "seam" }]
+      }
+    ]
+  };
+
+  const report = checkGeometryRequest(request).reports[0];
+  assert.equal(report.status, "error");
+  const missing = report.diagnostics.find((d) => d.code === "geometry.path_ref_not_found");
+  assert.ok(missing, "should emit path_ref_not_found for the blank neighbour path");
+  assert.equal(missing?.target, "front.seam");
+});
+
 test("band-seam points a neighbour cut-quantity error at that neighbour's target", () => {
   // 仕様保護（P2 contract）: neighbour の "Cut N" 欠落エラーも集約でなく当該 neighbour を target に指す。
   const band: BandPart = { partId: "band", dxf: buildBlockDxf("BAND", rectBand(160, 20), ["Fabric, Cut 1"]), block: "BAND" };
