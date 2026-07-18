@@ -287,7 +287,14 @@ export function extractAstmAnchorPoints(dxfText: string, blockName: string): Ast
   return anchors;
 }
 
-// ASTM の layer 4 = notch（合印）POINT。anchor(2/3) とは別に、seam 上の対応確認に使う。
+// ASTM DXF は notch（合印）を「形状ごとに別レイヤ」へ書く。V/スリット=4, T=80, castle=81, check=82,
+// U=83 の 5 枚に分散するので、この集合に載る layer をまとめて notch として拾う（layer 4 だけ読むと
+// T/castle/check/U を silent に取りこぼす）。どのレイヤも DXF 上はただの POINT（8/10/20 のみ参照）で
+// 書式は同一なので、フィルタを広げるだけで 5 種すべて拾える。
+// 84–87 は notch ではなく品質検証用の複製曲線（境界/内部線/内部くり抜き/縫い線）なので絶対に含めない。
+const ASTM_NOTCH_LAYERS = new Set(["4", "80", "81", "82", "83"]);
+
+// 上記 5 レイヤの notch POINT を集める。anchor(2/3) とは別に、seam 上の対応確認に使う。
 // notch が無いのは正常（空配列）だが、block 自体が無いのは path_not_found として区別する
 // （extractAstmPolylinePath / extractAstmAnchorPoints と挙動を揃え、silent failure を避ける）。
 export function extractAstmNotchPoints(dxfText: string, blockName: string): Point[] {
@@ -306,10 +313,15 @@ export function extractAstmNotchPoints(dxfText: string, blockName: string): Poin
       return;
     }
 
-    if (section === "BLOCKS" && currentBlock === targetBlock && pointEntity.layer === "4") {
+    if (
+      section === "BLOCKS" &&
+      currentBlock === targetBlock &&
+      pointEntity.layer !== null &&
+      ASTM_NOTCH_LAYERS.has(pointEntity.layer)
+    ) {
       if (!Number.isFinite(pointEntity.x) || !Number.isFinite(pointEntity.y)) {
         throw new DxfPathError("geometry.invalid_dxf_path", "DXF POINT is missing x/y coordinates.", {
-          actual: { blockName, layer: "4" }
+          actual: { blockName, layer: pointEntity.layer }
         });
       }
 

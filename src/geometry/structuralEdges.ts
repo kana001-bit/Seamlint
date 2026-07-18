@@ -32,9 +32,9 @@ export interface StructuralDart {
   depthMm: number; // 肩を結ぶ baseline から先端までの深さ。
 }
 
-// layer 4 notch を、その辺上へ射影した対応点。
+// ASTM notch（layer 4/80/81/82/83 = V/スリット・T・castle・check・U の 5 種）を、その辺上へ射影した対応点。
 export interface StructuralNotch {
-  point: Point; // 元の layer 4 POINT。
+  point: Point; // 元の notch POINT（ASTM 5 レイヤのいずれか）。
   offsetMm: number; // net line からの距離（notch 深さ）。
   edgePosition: number; // その辺の始点からの 0..1 位置。
   loopPosition: number; // ループ全体（最初の角を原点）での 0..1 位置。
@@ -56,7 +56,7 @@ export interface StructuralEdge {
   finishedLengthMm: number; // この辺の dart を縫い閉じた後の長さ（= 隣辺と突き合わせる量）。
   arcRange: [number, number]; // ループ上の正規化区間 [start, end]（最初の角を原点、0..1）。
   darts: StructuralDart[]; // この辺へ畳み込んだ dart（無ければ空）。
-  notches: StructuralNotch[]; // この辺へ射影された layer 4 notch。
+  notches: StructuralNotch[]; // この辺へ射影された ASTM notch（layer 4/80/81/82/83 の全種別）。
 }
 
 export interface StructuralEdgesResult {
