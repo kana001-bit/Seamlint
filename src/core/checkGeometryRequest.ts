@@ -716,7 +716,11 @@ function checkBandSeam(
   );
 
   if (!match.ok) {
-    return bandSeamFailureReport(check, target, match, neighbourTrace);
+    // sum-mismatch のときは match.measure に bandEdgeId があるので、matched と同じ辺住所を組んで failure にも積む
+    // （下流 = Truer が band 辺を address できるように）。住所は measure に無いのでここで edgeAddress から作る。
+    // 退化（no-band-edge 等）は measure=null で bandEdge も出さない（住所を捏造しない）。
+    const bandEdge = match.measure ? edgeAddress(bandResult, match.measure.bandEdgeId) : undefined;
+    return bandSeamFailureReport(check, target, match, neighbourTrace, bandEdge);
   }
 
   const diagnostics: Diagnostic[] = [
@@ -788,6 +792,24 @@ function resolveNeighbourGeometry(
   return { source, pathId };
 }
 
+// band-seam の band 側 actual（住所つき）。matched（成功・info）と sum-mismatch（失敗・warning）で同じ shape を
+// 積むための共有ビルダー。この2つは元々ここが非対称で、sum-mismatch が bandEdge 住所・bandLengthMm・
+// bandCutQuantity を落としていた（＝下流 Truer が band 辺を address できなかった）。以後ドリフトしないよう1か所に集約する。
+// bandEdge 住所は BandSubrangeMeasure に無いので、呼び出し側が edgeAddress で組んで渡す（無ければ捏造せず省く）。
+function bandMeasureActual(measure: BandSubrangeMeasure, bandEdge: SeamEdgeAddress | undefined): Record<string, unknown> {
+  return {
+    bandEdgeId: measure.bandEdgeId,
+    // 機械可読な辺住所（下流 = Truer 向け）。bandEdgeId は後方互換のため据え置き。各 neighbour も blockName/arcRange を持つ。
+    ...(bandEdge ? { bandEdge } : {}),
+    bandLengthMm: round(measure.bandLengthMm),
+    bandCutQuantity: measure.bandCutQuantity,
+    bandTotalMm: round(measure.bandTotalMm),
+    sumMm: round(measure.sumMm),
+    closureMm: round(measure.closureMm),
+    closurePct: round(measure.closurePct)
+  };
+}
+
 // バンドと隣接合計が reconcile したことを示す info 診断。測った証跡（バンド長辺・総周長・合計・closure）と、
 // 各 neighbour のどの辺を接辺とみなしたかを actual に載せる。info なので status は上げない。
 function bandSeamMatchedDiagnostic(
@@ -801,37 +823,24 @@ function bandSeamMatchedDiagnostic(
     code: "geometry.band_seam_matched",
     target,
     message: "Reconciled the band circumference against the sum of its neighbours' finished edges × cut quantity.",
-    actual: {
-      bandEdgeId: measure.bandEdgeId,
-      // 機械可読な辺住所（下流 = Truer 向け）。bandEdgeId は後方互換のため据え置き。各 neighbour も blockName/arcRange を持つ。
-      ...(bandEdge ? { bandEdge } : {}),
-      bandLengthMm: round(measure.bandLengthMm),
-      bandCutQuantity: measure.bandCutQuantity,
-      bandTotalMm: round(measure.bandTotalMm),
-      sumMm: round(measure.sumMm),
-      closureMm: round(measure.closureMm),
-      closurePct: round(measure.closurePct),
-      neighbours
-    }
+    actual: { ...bandMeasureActual(measure, bandEdge), neighbours }
   };
 }
 
 // reconcile に失敗した band-seam を report にする。sum-mismatch は曖昧な design issue（gather/tuck か集合違い）
-// なので warning、退化/check 不能は error。計測できていれば measure を証跡に載せる。
+// なので warning、退化/check 不能は error。計測できていれば（＝sum-mismatch）matched と同じ band 側 actual
+// （bandEdge 住所・長・枚数・総周長・合計・closure）を積む。退化（measure=null）は neighbours だけ。
 function bandSeamFailureReport(
   check: GeometryCheckSpec,
   target: string,
   failure: Extract<BandSubrangeMatchResult, { ok: false }>,
-  neighbours: BandNeighbourTrace[]
+  neighbours: BandNeighbourTrace[],
+  bandEdge: SeamEdgeAddress | undefined
 ): CheckReport {
   const detail = bandSeamFailureDetail(failure.reason);
-  const actual: Record<string, unknown> = { neighbours };
-  if (failure.measure) {
-    actual.bandTotalMm = round(failure.measure.bandTotalMm);
-    actual.sumMm = round(failure.measure.sumMm);
-    actual.closureMm = round(failure.measure.closureMm);
-    actual.closurePct = round(failure.measure.closurePct);
-  }
+  const actual: Record<string, unknown> = failure.measure
+    ? { ...bandMeasureActual(failure.measure, bandEdge), neighbours }
+    : { neighbours };
 
   const diagnostic: Diagnostic = {
     severity: detail.severity,

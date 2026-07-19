@@ -131,8 +131,10 @@ severity はスタイルではなく安全境界である。
 additive に載せる。下流（Truer 等）が診断から編集対象の辺を再導出せずに解決できるようにするため。
 
 - `geometry.seam_length_mismatch`（DXF seam-edge） / `geometry.seam_edge_matched` → `actual.fromEdge` / `actual.toEdge`
-- `geometry.band_seam_matched` → `actual.bandEdge`（band 周方向辺）＋ `actual.neighbours[]` の各要素が
-  `blockName` / `edgeId` / `arcRange` を持つ
+- `geometry.band_seam_matched` / `geometry.band_seam_sum_mismatch` → `actual.bandEdge`（band 周方向辺）＋
+  `actual.bandEdgeId` / `bandLengthMm` / `bandCutQuantity` ＋ `actual.neighbours[]` の各要素が
+  `blockName` / `edgeId` / `arcRange` を持つ。成功（matched）と不一致（sum-mismatch）で band 側 actual は
+  同 shape（`bandMeasureActual` で共有）。退化 error（no-band-edge 等）は住所を出さない
 - `geometry.curve_kink`（DXF closed-loop 等） → `actual.edge`（＋任意で `actual.edge.vertexIndex`）。ただし
   **一意な「辺の内側の kink」だけ**に載せる（下記）。
 

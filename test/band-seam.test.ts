@@ -128,7 +128,45 @@ test("band-seam defers the real band with sum-mismatch under a tighter closure t
   const mismatch = report.diagnostics.find((d) => d.code === "geometry.band_seam_sum_mismatch");
   assert.ok(mismatch, "should emit band_seam_sum_mismatch");
   assert.equal(mismatch?.severity, "warning");
-  assert.equal((mismatch?.actual as { sumMm: number }).sumMm, 655);
+
+  // 仕様保護（Truer bridge・住所の非対称を解消）: sum-mismatch も matched と同じ band 側 actual を積む。
+  // これが無いと下流（Truer）は band 辺を address できず理由付き skip に落ちる。field 名は matched とミラー。
+  type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
+  const actual = mismatch?.actual as {
+    bandEdgeId: number;
+    bandEdge: EdgeAddr;
+    bandLengthMm: number;
+    bandCutQuantity: number;
+    bandTotalMm: number;
+    sumMm: number;
+    closureMm: number;
+    closurePct: number;
+    neighbours: Array<EdgeAddr & { partId: string; finishedLengthMm: number; cutQuantity: number }>;
+  };
+  assert.equal(actual.bandEdgeId, 0);
+  assert.equal(actual.bandLengthMm, 680);
+  assert.equal(actual.bandCutQuantity, 1);
+  assert.equal(actual.bandTotalMm, 680);
+  assert.equal(actual.sumMm, 655);
+  assert.equal(actual.closureMm, 25);
+  assert.equal(actual.closurePct, 0.038);
+  assert.deepEqual([actual.bandEdge.blockName, actual.bandEdge.edgeId], ["WAISTBAND", 0]);
+  // arcRange は structuralEdges の値を丸めず素通し（Codex P2 回帰）。
+  assert.deepEqual(actual.bandEdge.arcRange, structuralEdges(KNICKERS_DXF, "WAISTBAND").edges[0].arcRange);
+  // 各 neighbour も住所つき（matched と同じ）。
+  const [front, back] = actual.neighbours;
+  assert.deepEqual([front.partId, front.blockName, front.edgeId], ["front", "FRONT", 0]);
+  assert.deepEqual([back.partId, back.blockName, back.edgeId], ["back", "BACK", 0]);
+
+  // ドリフト防止: 同一データを既定 tolerance（ok=matched）で回すと band 側 actual は sum-mismatch と一致する。
+  // matched/sum-mismatch が二度と非対称にならないことを固定する（bandMeasureActual の共有を守る）。
+  const matchedReport = firstReport(bandRequest(knickers("waistband", "WAISTBAND"), [knickers("front", "FRONT"), knickers("back", "BACK")]));
+  const matched = matchedReport.diagnostics.find((d) => d.code === "geometry.band_seam_matched");
+  const matchedBand = { ...(matched?.actual as Record<string, unknown>) };
+  const mismatchBand = { ...(mismatch?.actual as Record<string, unknown>) };
+  delete matchedBand.neighbours;
+  delete mismatchBand.neighbours;
+  assert.deepEqual(mismatchBand, matchedBand);
 });
 
 // ---- 構築 fixture（決定的な単位ケース）----
