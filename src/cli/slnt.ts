@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { inspectSvgExport } from "../core/inspectSvgExport.ts";
 import { checkSvgPath } from "../core/checkSvgPath.ts";
 import { checkGeometryRequest } from "../core/checkGeometryRequest.ts";
@@ -180,6 +181,48 @@ interface EdgesOptions {
   json: boolean;
 }
 
+// DXF 自動解決の失敗（該当 0 個 / 複数）を表す。code は edges の error envelope へそのまま流す
+// （input.* なので edgesErrorCode が加工せず通す）。
+class DxfResolveError extends Error {
+  readonly code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "DxfResolveError";
+    this.code = code;
+  }
+}
+
+// DXF ファイルパスの解決。明示指定があればそのまま使う。省略時はカレントディレクトリを *.dxf で
+// （非再帰に）走査し、ちょうど 1 個ならそれを採用する。「1 プロジェクト = 1 DXF（全パーツ入り）」
+// 前提の ergonomics。0 個は not_found、複数は「どれか 1 つ指定しろ」の ambiguous エラーにして、
+// 推測で測らない。DXF パスを取る今後のコマンドでも、この関数を共通の入口として使う。
+async function resolveDxfFile(explicitPath: string | undefined): Promise<string> {
+  if (explicitPath !== undefined) {
+    return explicitPath;
+  }
+
+  const dir = process.cwd();
+  const entries = await readdir(dir, { withFileTypes: true });
+  const dxfFiles = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".dxf"))
+    .map((entry) => entry.name)
+    .sort();
+
+  if (dxfFiles.length === 0) {
+    throw new DxfResolveError(
+      `No .dxf file found in ${dir}. Pass <dxf-file> explicitly.`,
+      "input.dxf_not_found"
+    );
+  }
+  if (dxfFiles.length > 1) {
+    throw new DxfResolveError(
+      `Multiple .dxf files found in ${dir} (${dxfFiles.join(", ")}). Pass one explicitly.`,
+      "input.dxf_ambiguous"
+    );
+  }
+  return join(dir, dxfFiles[0]);
+}
+
 // DXF BLOCK の構造辺ジオメトリ（edgeId / arcRange / points / lengthMm ほか）を出す薄い入口。
 // `check` が checkSvgPath を包むのと同じ構図で `structuralEdges` を包むだけ（read-only な幾何クエリで
 // diagnostic は返さない）。下流（Truer）が subprocess で辺の実座標を引き、seam overlay 描画や edge digest に
@@ -193,18 +236,27 @@ async function runEdges(args: string[]): Promise<number> {
     return 2;
   }
 
-  if (!options.file) {
-    emitEdgesError("Missing <dxf-file>.", "cli.invalid_arguments", null, options.json);
-    return 2;
-  }
+  // 必須引数 --block の欠落チェックは DXF 自動解決より先に出す。順序を逆にすると、同じ「--block 欠落」
+  // でも cwd の *.dxf 個数次第で cli.invalid_arguments と input.dxf_* が入れ替わり、誤用の分類が
+  // 環境依存でぶれる。自動解決は --block が揃ってから行う。
   if (!options.block) {
     emitEdgesError("Missing --block <name>.", "cli.invalid_arguments", null, options.json);
     return 2;
   }
 
+  let dxfFile: string;
+  try {
+    dxfFile = await resolveDxfFile(options.file);
+  } catch (error) {
+    // DXF 自動解決の失敗（該当 0 個 / 複数）は測定でなく usage 相当のエラー（exit 2）にする。
+    // 明示パスの読み取り失敗（ENOENT など下の readFile 経路）とは分け、「どのファイルか指定しろ」を促す。
+    emitEdgesError(errorMessage(error), edgesErrorCode(error), null, options.json);
+    return 2;
+  }
+
   let result: StructuralEdgesResult;
   try {
-    const dxfText = await readFile(options.file, "utf8");
+    const dxfText = await readFile(dxfFile, "utf8");
     result = structuralEdges(dxfText, options.block);
   } catch (error) {
     // DxfPathError（退化ループ・不正 DXF）は自身の geometry.* code を持つ。ENOENT 等は input.* へ写す。
@@ -371,7 +423,7 @@ function printUsage(): void {
   slnt check <svg-file> --path <path-id> [options]
   slnt inspect <svg-file> [--json]
   slnt check-request [request.json] [--json]
-  slnt edges <dxf-file> --block <name> [--json]
+  slnt edges [<dxf-file>] --block <name> [--json]
 
 Options:
   --compare-to <path-id>            Compare with another path in the same SVG.
@@ -395,8 +447,10 @@ Check-request mode:
 
 Edges mode:
   Reads an ASTM DXF file and prints the structural edges (edgeId, arcRange,
-  points, lengthMm, ...) of one BLOCK. --block is required. Read-only geometry
-  query for downstream tools (e.g. Truer seam overlays); returns no diagnostics.`);
+  points, lengthMm, ...) of one BLOCK. --block is required. <dxf-file> may be
+  omitted when the current directory holds exactly one .dxf; zero or multiple
+  is an error (pass one explicitly). Read-only geometry query for downstream
+  tools (e.g. Truer seam overlays); returns no diagnostics.`);
 }
 
 function wantsJson(argv: string[]): boolean {
