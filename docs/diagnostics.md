@@ -175,6 +175,8 @@ additive に載せる。下流（Truer 等）が診断から編集対象の辺�
 |---|---|---|
 | `input.file_not_found` | error | 入力ファイルが見つからない（`ENOENT`） |
 | `input.file_permission_denied` | error | 入力ファイルの権限がない（`EACCES` / `EPERM`） |
+| `input.dxf_not_found` | error | `slnt edges` で DXF 省略時、カレントに `*.dxf` が 1 つも無い |
+| `input.dxf_ambiguous` | error | `slnt edges` で DXF 省略時、カレントに `*.dxf` が複数あり特定不能（1 つ明示させる） |
 | `cli.invalid_arguments` | error | 引数不足・未知オプション・不正な値 |
 | `cli.invalid_request_json` | error | `check-request` の入力 JSON が不正（parse 失敗・shape 不正） |
 | `cli.runtime_error` | error | 上記に当てはまらない実行時エラー |

@@ -221,12 +221,16 @@ ASTM DXF の 1 BLOCK を **構造辺（seam edge）** に分割し、各辺の `
 [`structuralEdges`](library-api.md) を包む薄い入口。診断は返さない read-only な幾何クエリ。
 
 ```text
-slnt edges <dxf-file> --block <name> [--json]
+slnt edges [<dxf-file>] --block <name> [--json]
 ```
 
 補足:
 
-- `--block <name>` は **必須**（1 つの DXF に複数 BLOCK があるため）。
+- `<dxf-file>` は **省略可**。省略時はカレントディレクトリを `*.dxf` で（非再帰に）走査し、ちょうど
+  1 個ならそれを使う。「1 プロジェクト = 1 DXF（全パーツ入り）」前提の ergonomics。該当 0 個は
+  `input.dxf_not_found`、複数は `input.dxf_ambiguous` の error にして、どれか 1 つを明示させる（推測しない）。
+- `--block <name>` は **必須**（1 つの DXF に複数 BLOCK があるため）。DXF を省略できても、どの
+  パーツ（BLOCK）を出すかは別途必要。
 - 出力は text 要約が既定、`--json` で `StructuralEdgesResult`（[library-api.md](library-api.md) の型）の JSON。
 - 主用途は下流（**Truer**）が subprocess で辺の実座標を引くこと。診断の辺住所
   （`seam_length_mismatch.actual.fromEdge/toEdge` の `blockName`/`edgeId`/`arcRange`）から、その辺の
@@ -244,8 +248,8 @@ node ./src/cli/slnt.ts edges ./pattern.dxf --block FRONT --json
 | 状況 | exit |
 |---|---|
 | 正常（辺を出力） | 0 |
-| DXF 不正・BLOCK が退化・ファイル読めず（runtime） | 1 |
-| `--block` 欠落・ファイル引数欠落・未知オプション（usage） | 2 |
+| DXF 不正・BLOCK が退化・明示パスが読めず（runtime） | 1 |
+| `--block` 欠落・未知オプション・DXF 自動解決の失敗（0 個/複数）（usage） | 2 |
 
 runtime error は `--json` のとき `{ "error": { "code", "message", "blockName"? } }` の形で出す
 （subprocess 側は exit code で分岐できる）。
