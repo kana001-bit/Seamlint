@@ -25,7 +25,7 @@ export function resolvePointsForPathByFormat(
   }
 }
 
-export function pointsForPathByFormat(source: ResolvedGeometrySource, pathId: string, options: Partial<CheckOptions>): SampledPoint[] {
+function pointsForPathByFormat(source: ResolvedGeometrySource, pathId: string, options: Partial<CheckOptions>): SampledPoint[] {
   switch (source.format) {
     case "svg":
       return pointsForPath(source.text, pathId, options);
