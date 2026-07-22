@@ -81,12 +81,12 @@ export function resolveTarget(
   return { part, source, pathId };
 }
 
-export function findPart(request: GeometryCheckRequest, partId: string): GeometryPartRef | undefined {
+function findPart(request: GeometryCheckRequest, partId: string): GeometryPartRef | undefined {
   return request.parts.find((part) => part.partId === partId);
 }
 
 // unit/scale は宣言の検査（実座標の検証ではない）。error の target は part.partId を指す既存挙動を保つ。
-export function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRef): CheckReport | null {
+function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRef): CheckReport | null {
   if (part.unit !== "mm") {
     return errorReport(check, part.partId, "geometry.unsupported_unit", `Geometry part "${part.partId}" must use unit "mm".`);
   }
@@ -96,7 +96,7 @@ export function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRe
   return null;
 }
 
-export function validatePartFormat(check: GeometryCheckSpec, part: GeometryPartRef, format: string): CheckReport | null {
+function validatePartFormat(check: GeometryCheckSpec, part: GeometryPartRef, format: string): CheckReport | null {
   if (format === "svg" || format === "dxf") {
     return null;
   }
@@ -110,7 +110,7 @@ export function validatePartFormat(check: GeometryCheckSpec, part: GeometryPartR
 }
 
 // inline geometryText / svgText / sources[geometrySource] の順で source テキストを解決する。
-export function resolveGeometrySource(part: GeometryPartRef, sources: Sources, format: GeometryFormat): ResolvedGeometrySource | null {
+function resolveGeometrySource(part: GeometryPartRef, sources: Sources, format: GeometryFormat): ResolvedGeometrySource | null {
   const text = part.geometryText ?? part.svgText ?? sources[part.geometrySource];
   if (!text) {
     return null;
@@ -123,7 +123,7 @@ export function resolveGeometrySource(part: GeometryPartRef, sources: Sources, f
 }
 
 // 非 SVG parser が入るまでは、format 省略時に "svg" として扱う（既存挙動）。
-export function geometryFormatFor(part: GeometryPartRef): string {
+function geometryFormatFor(part: GeometryPartRef): string {
   return part.format ?? "svg";
 }
 
