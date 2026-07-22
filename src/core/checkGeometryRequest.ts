@@ -18,29 +18,24 @@ import type {
   GeometryCheckRange,
   GeometryCheckRequest,
   GeometryCheckSpec,
-  GeometryFormat,
   GeometryMarkerRange,
   GeometryPartRef,
   GeometryRequestOptions,
   GeometryRequestReport,
-  GeometryTarget,
   GeometryTolerance,
   Point,
   SampledPoint
 } from "../types.ts";
 import { pointsForPath, statusForDiagnostics } from "./checkSvgPath.ts";
+import { errorReport, targetFor, targetPairFor } from "./geometry-request/reports.ts";
+import { pathIdFor, resolveTarget } from "./geometry-request/resolveTarget.ts";
+import type { ResolvedGeometrySource, Sources } from "./geometry-request/resolveTarget.ts";
 
-type Sources = Record<string, string>;
 type PointsResult = { points: SampledPoint[] } | { error: CheckReport };
 
 interface ResolvedMarkerRange {
   startPosition: number;
   endPosition: number;
-}
-
-interface ResolvedGeometrySource {
-  format: GeometryFormat;
-  text: string;
 }
 
 export function checkGeometryRequest(
@@ -65,45 +60,14 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
     return toleranceError;
   }
 
-  const fromPart = findPart(request, check.from.partId);
-  if (!fromPart) {
-    return errorReport(check, targetFor(check.from), "geometry.part_not_found", `Geometry part "${check.from.partId}" was not found.`);
-  }
-
-  const fromUnitError = validatePartUnits(check, fromPart);
-  if (fromUnitError) {
-    return fromUnitError;
-  }
-
-  const fromFormat = geometryFormatFor(fromPart);
-  const fromFormatError = validatePartFormat(check, fromPart, fromFormat);
-  if (fromFormatError) {
-    return fromFormatError;
-  }
-
-  const fromSource = resolveGeometrySource(fromPart, sources, fromFormat as GeometryFormat);
-  if (!fromSource) {
-    return errorReport(
-      check,
-      targetFor(check.from),
-      "geometry.source_not_loaded",
-      `Geometry source "${fromPart.geometrySource}" (${fromFormat}) was not provided to Seamlint.`
-    );
-  }
-
-  const fromPath = pathIdFor(fromPart, check.from.pathRef);
-  if (!fromPath) {
-    return errorReport(
-      check,
-      targetFor(check.from),
-      "geometry.path_ref_not_found",
-      `Path reference "${check.from.pathRef}" was not found on part "${fromPart.partId}".`
-    );
+  const from = resolveTarget(request, check, check.from, sources);
+  if ("error" in from) {
+    return from.error;
   }
 
   if (check.kind === "closed-loop") {
-    return checkPathByFormat(fromSource, check, {
-      path: fromPath,
+    return checkPathByFormat(from.source, check, {
+      path: from.pathId,
       target: targetFor(check.from),
       closed: true,
       ...toleranceOptions(check)
@@ -112,54 +76,23 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
 
   // band-seam は from=バンド、neighbours=隣接ピース群で、`to` を使わない（N-ary）。`to` 必須ガードの前に分岐する。
   if (check.kind === "band-seam") {
-    return checkBandSeam(request, check, fromSource, fromPath, sources);
+    return checkBandSeam(request, check, from.source, from.pathId, sources);
   }
 
   if (!check.to) {
     return errorReport(check, targetFor(check.from), "geometry.missing_check_target", `Check "${check.id}" requires a target path.`);
   }
 
-  const toPart = findPart(request, check.to.partId);
-  if (!toPart) {
-    return errorReport(check, targetFor(check.to), "geometry.part_not_found", `Geometry part "${check.to.partId}" was not found.`);
-  }
-
-  const toUnitError = validatePartUnits(check, toPart);
-  if (toUnitError) {
-    return toUnitError;
-  }
-
-  const toFormat = geometryFormatFor(toPart);
-  const toFormatError = validatePartFormat(check, toPart, toFormat);
-  if (toFormatError) {
-    return toFormatError;
-  }
-
-  const toSource = resolveGeometrySource(toPart, sources, toFormat as GeometryFormat);
-  if (!toSource) {
-    return errorReport(
-      check,
-      targetFor(check.to),
-      "geometry.source_not_loaded",
-      `Geometry source "${toPart.geometrySource}" (${toFormat}) was not provided to Seamlint.`
-    );
-  }
-
-  const toPath = pathIdFor(toPart, check.to.pathRef);
-  if (!toPath) {
-    return errorReport(
-      check,
-      targetFor(check.to),
-      "geometry.path_ref_not_found",
-      `Path reference "${check.to.pathRef}" was not found on part "${toPart.partId}".`
-    );
+  const to = resolveTarget(request, check, check.to, sources);
+  if ("error" in to) {
+    return to.error;
   }
 
   if (check.kind === "smooth-continuation") {
     if (
-      toSource.format !== fromSource.format ||
-      toPart.geometrySource !== fromPart.geometrySource ||
-      toSource.text !== fromSource.text
+      to.source.format !== from.source.format ||
+      to.part.geometrySource !== from.part.geometrySource ||
+      to.source.text !== from.source.text
     ) {
       return errorReport(
         check,
@@ -169,9 +102,9 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
       );
     }
 
-    return checkPathByFormat(fromSource, check, {
-      path: fromPath,
-      compareTo: toPath,
+    return checkPathByFormat(from.source, check, {
+      path: from.pathId,
+      compareTo: to.pathId,
       target: targetFor(check.from),
       compareTarget: targetFor(check.to),
       pairTarget: targetPairFor(check),
@@ -181,10 +114,10 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "sewn-seam" || check.kind === "eased-seam") {
-    return checkPathByFormat(fromSource, check, {
-      path: fromPath,
-      compareTo: toPath,
-      compareGeometrySource: toSource,
+    return checkPathByFormat(from.source, check, {
+      path: from.pathId,
+      compareTo: to.pathId,
+      compareGeometrySource: to.source,
       target: targetFor(check.from),
       compareTarget: targetFor(check.to),
       pairTarget: targetPairFor(check),
@@ -193,11 +126,11 @@ function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sourc
   }
 
   if (check.kind === "seam-edge") {
-    return checkSharedEdgeSeam(fromSource, toSource, check, fromPath, toPath);
+    return checkSharedEdgeSeam(from.source, to.source, check, from.pathId, to.pathId);
   }
 
   if (check.kind === "gathered-seam") {
-    return checkGatheredSeam(fromSource, toSource, check, fromPart, fromPath, toPart, toPath);
+    return checkGatheredSeam(from.source, to.source, check, from.part, from.pathId, to.part, to.pathId);
   }
 
   return errorReport(
@@ -644,7 +577,7 @@ function checkBandSeam(
   const neighbours: BandNeighbour[] = [];
   const neighbourTrace: BandNeighbourTrace[] = [];
   for (const neighbourTarget of neighbourTargets) {
-    const resolved = resolveNeighbourGeometry(request, check, neighbourTarget, sources);
+    const resolved = resolveTarget(request, check, neighbourTarget, sources);
     if ("error" in resolved) {
       return resolved.error;
     }
@@ -732,64 +665,6 @@ function checkBandSeam(
     lengthMm: round(match.bandTotalMm),
     diagnostics
   };
-}
-
-interface ResolvedNeighbourGeometry {
-  source: ResolvedGeometrySource;
-  pathId: string;
-}
-
-// neighbour target を part / source / path へ解決する（from の解決と同じ検査: part 存在・mm/scale・format・source
-// ・pathRef）。失敗はその場の error report で返す。band-seam の各 neighbour で使う。
-function resolveNeighbourGeometry(
-  request: GeometryCheckRequest,
-  check: GeometryCheckSpec,
-  neighbourTarget: GeometryTarget,
-  sources: Sources
-): ResolvedNeighbourGeometry | { error: CheckReport } {
-  const part = findPart(request, neighbourTarget.partId);
-  if (!part) {
-    return {
-      error: errorReport(check, targetFor(neighbourTarget), "geometry.part_not_found", `Geometry part "${neighbourTarget.partId}" was not found.`)
-    };
-  }
-
-  const unitError = validatePartUnits(check, part);
-  if (unitError) {
-    return { error: unitError };
-  }
-
-  const format = geometryFormatFor(part);
-  const formatError = validatePartFormat(check, part, format);
-  if (formatError) {
-    return { error: formatError };
-  }
-
-  const source = resolveGeometrySource(part, sources, format as GeometryFormat);
-  if (!source) {
-    return {
-      error: errorReport(
-        check,
-        targetFor(neighbourTarget),
-        "geometry.source_not_loaded",
-        `Geometry source "${part.geometrySource}" (${format}) was not provided to Seamlint.`
-      )
-    };
-  }
-
-  const pathId = pathIdFor(part, neighbourTarget.pathRef);
-  if (!pathId) {
-    return {
-      error: errorReport(
-        check,
-        targetFor(neighbourTarget),
-        "geometry.path_ref_not_found",
-        `Path reference "${neighbourTarget.pathRef}" was not found on part "${part.partId}".`
-      )
-    };
-  }
-
-  return { source, pathId };
 }
 
 // band-seam の band 側 actual（住所つき）。matched（成功・info）と sum-mismatch（失敗・warning）で同じ shape を
@@ -918,49 +793,6 @@ function bandSeamTarget(check: GeometryCheckSpec): string {
 // band-seam の closure 許容（camelCase / snake_case）。未指定なら matcher 既定（6%）に委ねる。
 function bandClosureRatio(check: GeometryCheckSpec): number | undefined {
   return check.tolerance?.closureRatio ?? check.tolerance?.closure_ratio;
-}
-
-function findPart(request: GeometryCheckRequest, partId: string): GeometryPartRef | undefined {
-  return request.parts.find((part) => part.partId === partId);
-}
-
-function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRef): CheckReport | null {
-  if (part.unit !== "mm") {
-    return errorReport(check, part.partId, "geometry.unsupported_unit", `Geometry part "${part.partId}" must use unit "mm".`);
-  }
-  if (part.scale !== 1) {
-    return errorReport(check, part.partId, "geometry.unsupported_scale", `Geometry part "${part.partId}" must use scale 1.`);
-  }
-  return null;
-}
-
-function validatePartFormat(check: GeometryCheckSpec, part: GeometryPartRef, format: string): CheckReport | null {
-  if (format === "svg" || format === "dxf") {
-    return null;
-  }
-
-  return formatErrorReport(
-    check,
-    part.partId,
-    `Geometry part "${part.partId}" uses unsupported format "${format}".`,
-    format
-  );
-}
-
-function resolveGeometrySource(part: GeometryPartRef, sources: Sources, format: GeometryFormat): ResolvedGeometrySource | null {
-  const text = part.geometryText ?? part.svgText ?? sources[part.geometrySource];
-  if (!text) {
-    return null;
-  }
-
-  return {
-    format,
-    text
-  };
-}
-
-function geometryFormatFor(part: GeometryPartRef): string {
-  return part.format ?? "svg";
 }
 
 function checkPathByFormat(source: ResolvedGeometrySource, check: GeometryCheckSpec, options: CheckOptions): CheckReport {
@@ -1112,42 +944,6 @@ function svgPathErrorCode(message: string): string {
     return "geometry.unsupported_svg_command";
   }
   return "geometry.invalid_svg_path";
-}
-
-function formatErrorReport(check: GeometryCheckSpec, target: string, message: string, format: string): CheckReport {
-  const diagnostics: Diagnostic[] = [
-    {
-      severity: "error",
-      code: "geometry.unsupported_format",
-      target,
-      message,
-      expected: { checkId: check.id, kind: check.kind, supportedFormats: ["svg", "dxf"] },
-      actual: { target, format }
-    }
-  ];
-
-  return {
-    status: "error",
-    target,
-    lengthMm: null,
-    diagnostics
-  };
-}
-
-function pathIdFor(part: GeometryPartRef, pathRef: string): string {
-  const path = part.paths[pathRef] ?? pathRef;
-  return path.startsWith("#") ? path.slice(1) : path;
-}
-
-function targetFor(target: GeometryTarget): string {
-  return `${target.partId}.${target.connectorId ?? target.pathRef}`;
-}
-
-function targetPairFor(check: GeometryCheckSpec): string {
-  if (!check.to) {
-    return targetFor(check.from);
-  }
-  return `${targetFor(check.from)}/${targetFor(check.to)}`;
 }
 
 function toleranceOptions(check: GeometryCheckSpec): Partial<CheckOptions> {
@@ -1315,26 +1111,6 @@ function resolveMarkerRange(
 
 function validMarkerPosition(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= 1;
-}
-
-function errorReport(check: GeometryCheckSpec, target: string, code: string, message: string): CheckReport {
-  const diagnostics: Diagnostic[] = [
-    {
-      severity: "error",
-      code,
-      target,
-      message,
-      expected: { checkId: check.id, kind: check.kind },
-      actual: { target }
-    }
-  ];
-
-  return {
-    status: "error",
-    target,
-    lengthMm: null,
-    diagnostics
-  };
 }
 
 function round(value: number): number {
