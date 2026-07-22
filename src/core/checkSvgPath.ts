@@ -1,6 +1,6 @@
 import { extractPathDataById, parseSvgPathData } from "../geometry/svgPath.ts";
 import { samplePath } from "../geometry/samplePath.ts";
-import { polylineLength } from "../geometry/vector.ts";
+import { polylineLength, round } from "../geometry/vector.ts";
 import { checkCurveSmoothness } from "../rules/curveSmoothness.ts";
 import { checkEndpointTangentCompatibility } from "../rules/endpointTangentCompatibility.ts";
 import { checkSeamLengthCompatibility } from "../rules/seamLengthCompatibility.ts";
@@ -97,8 +97,4 @@ export function statusForDiagnostics(diagnostics: readonly Diagnostic[]): Report
     return "warning";
   }
   return "ok";
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

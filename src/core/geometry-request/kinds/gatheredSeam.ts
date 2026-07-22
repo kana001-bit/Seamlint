@@ -1,7 +1,7 @@
 // gathered-seam の測定本体。両側の marker range を解決し、その範囲の弧長を突き合わせて gather 比を測る。
 // marker の存在・所属 path・位置の妥当性検査（resolveMarkerRange）もここに閉じる。
 import { checkGatheredSeamCompatibility } from "../../../rules/gatheredSeamCompatibility.ts";
-import { measureRangeOnPolyline } from "../../../geometry/vector.ts";
+import { measureRangeOnPolyline, round } from "../../../geometry/vector.ts";
 import { statusForDiagnostics } from "../../checkSvgPath.ts";
 import { errorReport, targetFor, targetPairFor } from "../reports.ts";
 import { pathIdFor } from "../resolveTarget.ts";
@@ -170,8 +170,4 @@ function resolveMarkerRange(
 
 function validMarkerPosition(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= 1;
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

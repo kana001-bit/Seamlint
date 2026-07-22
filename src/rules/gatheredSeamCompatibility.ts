@@ -1,3 +1,4 @@
+import { round } from "../geometry/vector.ts";
 import type { Diagnostic } from "../types.ts";
 
 interface GatheredSeamOptions {
@@ -60,8 +61,4 @@ export function checkGatheredSeamCompatibility(
       suggestion: ["Adjust the gather range or expected ratio, or confirm that this seam should be gathered."]
     }
   ];
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

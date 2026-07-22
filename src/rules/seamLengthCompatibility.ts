@@ -1,4 +1,4 @@
-import { polylineLength } from "../geometry/vector.ts";
+import { polylineLength, round } from "../geometry/vector.ts";
 import { DEFAULT_LENGTH_TOLERANCE_MM } from "../config/defaults.ts";
 import type { Diagnostic, SampledPoint } from "../types.ts";
 
@@ -83,8 +83,4 @@ export function checkSeamLengthCompatibility(
       suggestion: ["Check whether the difference is intentional ease, gather, or a pattern mismatch."]
     }
   ];
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }
