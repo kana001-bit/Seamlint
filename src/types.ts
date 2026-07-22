@@ -161,6 +161,9 @@ export interface GeometryPartRef {
 }
 
 export interface GeometryCheckRequest {
+  // 未実装: 将来の file 参照解決の base dir 用。現状はどの経路も読まず（grep 済み）、request は
+  // self-contained（各 part の inline geometryText）で解決する。Loomit 契約（docs/loomit-integration.md）
+  // として型には残すが、実装されるまで no-op。
   projectRoot?: string;
   parts: GeometryPartRef[];
   checks: GeometryCheckSpec[];
