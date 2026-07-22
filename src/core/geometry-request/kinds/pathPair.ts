@@ -4,7 +4,7 @@
 import { checkCurveSmoothness } from "../../../rules/curveSmoothness.ts";
 import { checkEndpointTangentCompatibility } from "../../../rules/endpointTangentCompatibility.ts";
 import { checkSeamLengthCompatibility } from "../../../rules/seamLengthCompatibility.ts";
-import { polylineLength } from "../../../geometry/vector.ts";
+import { polylineLength, round } from "../../../geometry/vector.ts";
 import { statusForDiagnostics } from "../../checkSvgPath.ts";
 import { resolvePointsForPathByFormat } from "../sampling.ts";
 import { addCurveKinkAddressing } from "../seamEdgeAddressing.ts";
@@ -71,8 +71,4 @@ export function checkPathByFormat(source: ResolvedGeometrySource, check: Geometr
     lengthMm: round(polylineLength(fromResult.points)),
     diagnostics
   };
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

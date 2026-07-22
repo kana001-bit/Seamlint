@@ -213,3 +213,9 @@ function projectPointOntoSegment(point: Point, start: Point, end: Point): { t: n
     }
   };
 }
+
+// 診断・レポート境界での 3 桁丸め（0.001mm グリッド）。内部計算は丸めず、出力直前だけここで丸める。
+// 以前は各 rule / core / kind に同じ実装がコピーされていた（single source 化）。
+export function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}

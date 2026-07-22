@@ -3,6 +3,7 @@
 // 比べる sewn-seam の「ceiling」を、実際に縫い合う辺の比較へ引き下げる。DXF 専用（SVG は辺分割不可）。
 import { structuralEdges } from "../../../geometry/structuralEdges.ts";
 import type { StructuralEdge, StructuralEdgesResult } from "../../../geometry/structuralEdges.ts";
+import { round } from "../../../geometry/vector.ts";
 import { matchSharedEdge } from "../../../geometry/sharedEdgeSeam.ts";
 import type { SharedEdgeCandidate, SharedEdgeMatchResult } from "../../../geometry/sharedEdgeSeam.ts";
 import { checkSeamLengthCompatibility } from "../../../rules/seamLengthCompatibility.ts";
@@ -196,8 +197,4 @@ function lengthAsPolyline(lengthMm: number): SampledPoint[] {
     { x: 0, y: 0 },
     { x: lengthMm, y: 0 }
   ];
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

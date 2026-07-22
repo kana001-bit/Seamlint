@@ -1,4 +1,4 @@
-import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.ts";
+import { angleBetweenDegrees, distance, round, subtract } from "../geometry/vector.ts";
 import { DEFAULT_ANGLE_THRESHOLD_DEG, DEFAULT_CLOSED_ENDPOINT_THRESHOLD_MM } from "../config/defaults.ts";
 import type { Diagnostic, Point, SampledPoint } from "../types.ts";
 
@@ -94,10 +94,6 @@ export function checkCurveSmoothness(
 
 function isSubpathBreak(previous: SampledPoint, current: SampledPoint, next: SampledPoint): boolean {
   return Boolean(current.moveTo || next.moveTo || previous.moveTo);
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }
 
 function roundPoint(point: Point): Point {

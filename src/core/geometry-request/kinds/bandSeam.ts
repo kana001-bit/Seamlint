@@ -4,6 +4,7 @@
 // 選ぶ。裁断枚数は layer-1 "Cut N"。DXF 専用（structuralEdges が辺分割を要する）。
 import { structuralEdges } from "../../../geometry/structuralEdges.ts";
 import type { StructuralEdgesResult } from "../../../geometry/structuralEdges.ts";
+import { round } from "../../../geometry/vector.ts";
 import { matchBandSubrange } from "../../../geometry/bandSubrangeSeam.ts";
 import type { BandNeighbour, BandSubrangeMatchResult, BandSubrangeMeasure } from "../../../geometry/bandSubrangeSeam.ts";
 import { statusForDiagnostics } from "../../checkSvgPath.ts";
@@ -279,8 +280,4 @@ function bandSeamFailureDetail(reason: Extract<BandSubrangeMatchResult, { ok: fa
         suggestion: ['Check each neighbour\'s band edge and its layer-1 "Cut N" quantity.']
       };
   }
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }

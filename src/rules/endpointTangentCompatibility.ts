@@ -1,4 +1,4 @@
-import { angleBetweenDegrees, distance, subtract } from "../geometry/vector.ts";
+import { angleBetweenDegrees, distance, round, subtract } from "../geometry/vector.ts";
 import { DEFAULT_ENDPOINT_TOLERANCE_MM, DEFAULT_TANGENT_TOLERANCE_DEG } from "../config/defaults.ts";
 import type { Diagnostic, Point, SampledPoint } from "../types.ts";
 
@@ -133,10 +133,6 @@ function flowTangent(points: readonly SampledPoint[], atEnd: boolean, role: "arr
   }
   // "leaving": join は `to` を通る flow の始端: 接合点から本体側へ離れる向き。
   return atEnd ? subtract(secondLast, last) : subtract(points[1], points[0]);
-}
-
-function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }
 
 function roundPoint(point: Point): Point {
