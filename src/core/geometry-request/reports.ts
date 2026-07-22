@@ -16,6 +16,13 @@ export function targetPairFor(check: GeometryCheckSpec): string {
   return `${targetFor(check.from)}/${targetFor(check.to)}`;
 }
 
+// band-seam の target: バンド側と neighbours を "/" で連結する（single path は path id、pair は from/to の N-ary 拡張）。
+export function bandSeamTarget(check: GeometryCheckSpec): string {
+  const band = targetFor(check.from);
+  const neighbours = (check.neighbours ?? []).map(targetFor);
+  return neighbours.length === 0 ? band : `${band}/${neighbours.join("/")}`;
+}
+
 // 汎用の error CheckReport（1 診断）。expected に checkId/kind、actual に target を載せる標準形。
 export function errorReport(check: GeometryCheckSpec, target: string, code: string, message: string): CheckReport {
   const diagnostics: Diagnostic[] = [

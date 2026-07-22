@@ -1,4 +1,4 @@
-import { DxfPathError, extractAstmPolylinePath } from "../geometry/dxfPath.ts";
+import { extractAstmPolylinePath } from "../geometry/dxfPath.ts";
 import { samplePath } from "../geometry/samplePath.ts";
 import { matchSharedEdge } from "../geometry/sharedEdgeSeam.ts";
 import type { SharedEdgeCandidate, SharedEdgeMatchResult } from "../geometry/sharedEdgeSeam.ts";
@@ -22,14 +22,21 @@ import type {
   GeometryPartRef,
   GeometryRequestOptions,
   GeometryRequestReport,
-  GeometryTolerance,
   Point,
   SampledPoint
 } from "../types.ts";
 import { pointsForPath, statusForDiagnostics } from "./checkSvgPath.ts";
-import { errorReport, targetFor, targetPairFor } from "./geometry-request/reports.ts";
+import { bandSeamTarget, errorReport, targetFor, targetPairFor } from "./geometry-request/reports.ts";
+import { geometryPathErrorReport } from "./geometry-request/geometryPathError.ts";
 import { pathIdFor, resolveTarget } from "./geometry-request/resolveTarget.ts";
 import type { ResolvedGeometrySource, Sources } from "./geometry-request/resolveTarget.ts";
+import {
+  bandClosureRatio,
+  normalizeGatherRatioRange,
+  rawGatherRatio,
+  toleranceOptions,
+  validateTolerance
+} from "./geometry-request/tolerance.ts";
 
 type PointsResult = { points: SampledPoint[] } | { error: CheckReport };
 
@@ -783,18 +790,6 @@ function bandSeamFailureDetail(reason: Extract<BandSubrangeMatchResult, { ok: fa
   }
 }
 
-// band-seam の target: バンド側と neighbours を "/" で連結する（single path は path id、pair は from/to の N-ary 拡張）。
-function bandSeamTarget(check: GeometryCheckSpec): string {
-  const band = targetFor(check.from);
-  const neighbours = (check.neighbours ?? []).map(targetFor);
-  return neighbours.length === 0 ? band : `${band}/${neighbours.join("/")}`;
-}
-
-// band-seam の closure 許容（camelCase / snake_case）。未指定なら matcher 既定（6%）に委ねる。
-function bandClosureRatio(check: GeometryCheckSpec): number | undefined {
-  return check.tolerance?.closureRatio ?? check.tolerance?.closure_ratio;
-}
-
 function checkPathByFormat(source: ResolvedGeometrySource, check: GeometryCheckSpec, options: CheckOptions): CheckReport {
   const target = options.target ?? options.path ?? "path";
   const fromResult = resolvePointsForPathByFormat(source, check, options.path ?? "", target, options);
@@ -883,158 +878,6 @@ function pointsForPathByFormat(source: ResolvedGeometrySource, pathId: string, o
       });
     }
   }
-}
-
-function geometryPathErrorReport(
-  check: GeometryCheckSpec,
-  target: string,
-  source: ResolvedGeometrySource,
-  pathId: string,
-  error: unknown
-): CheckReport {
-  const diagnostic = geometryPathErrorDiagnostic(check, target, source, pathId, error);
-  return {
-    status: "error",
-    target,
-    lengthMm: null,
-    diagnostics: [diagnostic]
-  };
-}
-
-function geometryPathErrorDiagnostic(
-  check: GeometryCheckSpec,
-  target: string,
-  source: ResolvedGeometrySource,
-  pathId: string,
-  error: unknown
-): Diagnostic {
-  if (error instanceof DxfPathError) {
-    return {
-      severity: "error",
-      code: error.code,
-      target,
-      message: error.message,
-      expected: error.expected ?? { checkId: check.id, kind: check.kind, format: source.format, pathId },
-      actual: error.actual ?? { target, format: source.format, pathId }
-    };
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-  return {
-    severity: "error",
-    code: source.format === "svg" ? svgPathErrorCode(message) : "geometry.invalid_dxf_path",
-    target,
-    message,
-    expected: { checkId: check.id, kind: check.kind, format: source.format, pathId },
-    actual: { target, format: source.format, pathId }
-  };
-}
-
-function svgPathErrorCode(message: string): string {
-  if (message.startsWith("Could not find <path id=")) {
-    return "geometry.path_not_found";
-  }
-  if (message.startsWith("Unsupported SVG transform")) {
-    return "geometry.unsupported_transform";
-  }
-  if (message.startsWith("Unsupported non-unit viewBox scale")) {
-    return "geometry.unsupported_viewbox_scale";
-  }
-  if (message.startsWith("Unsupported SVG path command:")) {
-    return "geometry.unsupported_svg_command";
-  }
-  return "geometry.invalid_svg_path";
-}
-
-function toleranceOptions(check: GeometryCheckSpec): Partial<CheckOptions> {
-  const tolerance: GeometryTolerance = check.tolerance ?? {};
-  return {
-    lengthToleranceMm: tolerance.lengthMm ?? tolerance.length_mm,
-    endpointToleranceMm: tolerance.endpointMm ?? tolerance.endpoint_mm,
-    tangentToleranceDeg: tolerance.tangentDeg ?? tolerance.tangent_deg,
-    angleThresholdDeg: tolerance.angleDeg ?? tolerance.angle_deg,
-    easeRatioRange: check.kind === "eased-seam" ? normalizeRatioRange(rawEaseRatio(check)) : undefined
-  };
-}
-
-function validateTolerance(check: GeometryCheckSpec): CheckReport | null {
-  if (check.kind === "eased-seam") {
-    const raw = rawEaseRatio(check);
-    if (raw === undefined || normalizeRatioRange(raw)) {
-      return null;
-    }
-    return errorReport(
-      check,
-      targetPairFor(check),
-      "geometry.invalid_tolerance",
-      `Check "${check.id}" has an invalid easeRatio range; expected [min, max] with 0 <= min <= max.`
-    );
-  }
-
-  if (check.kind === "gathered-seam") {
-    const raw = rawGatherRatio(check);
-    if (raw === undefined || normalizeGatherRatioRange(raw)) {
-      return null;
-    }
-    return errorReport(
-      check,
-      targetPairFor(check),
-      "geometry.invalid_tolerance",
-      `Check "${check.id}" has an invalid gatherRatio range; expected [min, max] with 1 <= min <= max.`
-    );
-  }
-
-  // band-seam の closureRatio は単一の比（>= 0）。不正値のまま matchBandSubrange に渡すと RangeError を投げるので、
-  // ここで宣言検査して invalid_tolerance の error report に倒す（他 kind と同じ入口で弾く）。
-  if (check.kind === "band-seam") {
-    const raw = bandClosureRatio(check);
-    if (raw === undefined || (Number.isFinite(raw) && raw >= 0)) {
-      return null;
-    }
-    return errorReport(
-      check,
-      bandSeamTarget(check),
-      "geometry.invalid_tolerance",
-      `Check "${check.id}" has an invalid closureRatio; expected a finite number >= 0.`
-    );
-  }
-
-  return null;
-}
-
-function rawEaseRatio(check: GeometryCheckSpec): readonly [number, number] | undefined {
-  return check.tolerance?.easeRatio ?? check.tolerance?.ease_ratio;
-}
-
-function rawGatherRatio(check: GeometryCheckSpec): readonly [number, number] | undefined {
-  return check.tolerance?.gatherRatio ?? check.tolerance?.gather_ratio;
-}
-
-function normalizeRatioRange(value: readonly [number, number] | undefined): readonly [number, number] | undefined {
-  if (!Array.isArray(value) || value.length !== 2) {
-    return undefined;
-  }
-
-  const [minRatio, maxRatio] = value;
-  if (!Number.isFinite(minRatio) || !Number.isFinite(maxRatio) || minRatio < 0 || maxRatio < minRatio) {
-    return undefined;
-  }
-
-  return [minRatio, maxRatio];
-}
-
-function normalizeGatherRatioRange(value: readonly [number, number] | undefined): readonly [number, number] | undefined {
-  const range = normalizeRatioRange(value);
-  if (!range) {
-    return undefined;
-  }
-
-  const [minRatio, maxRatio] = range;
-  if (minRatio < 1 || maxRatio < 1) {
-    return undefined;
-  }
-
-  return [minRatio, maxRatio];
 }
 
 function rangeStartMarker(range: GeometryMarkerRange): string | undefined {
