@@ -743,6 +743,78 @@ test("reports gathered seams whose ratio falls outside the configured range", ()
   assert.equal(report.diagnostics[0].target, "sleeve.cap/cuff.seam");
 });
 
+test("rejects a negative scalar tolerance instead of measuring under a silent default", () => {
+  // 仕様保護（confidently-wrong 防止）: 負の lengthMm は「常時 mismatch」を招く。既定へ falls back させず明示 error。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      { partId: "sleeve", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { cap: "#longer" } },
+      { partId: "cuff", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { seam: "#straight" } }
+    ],
+    checks: [
+      {
+        id: "seam",
+        kind: "sewn-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        tolerance: { lengthMm: -1 }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.invalid_tolerance");
+});
+
+test("rejects an angleDeg tolerance above 180 at the request boundary", () => {
+  // 仕様保護: 角度 tolerance は 0..180。範囲外（NaN も）は測定へ進めず明示 error。
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg"><path id="tri" d="M 0 0 L 40 0 L 40 40 Z" /></svg>`;
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [{ partId: "body", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { edge: "#tri" } }],
+    checks: [
+      {
+        id: "loop",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "edge", connectorId: "edge" },
+        tolerance: { angleDeg: 200 }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": svg }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.invalid_tolerance");
+});
+
+test("accepts valid scalar tolerances at the request boundary (does not over-reject)", () => {
+  // 仕様保護: 正当な tolerance（Loomit が送る形）は境界検証を素通る。lengthMm:5 は longer↔straight の差 3 を許容 → ok。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      { partId: "sleeve", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { cap: "#longer" } },
+      { partId: "cuff", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { seam: "#straight" } }
+    ],
+    checks: [
+      {
+        id: "seam",
+        kind: "sewn-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        tolerance: { lengthMm: 5 }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "ok");
+  assert.deepEqual(report.diagnostics, []);
+});
+
 test("rejects a snake_case tolerance field with an explicit migration error, not a silent default", () => {
   // 仕様保護（confidently-wrong 防止）: camelCase 一本化後、snake_case tolerance を黙って既定へフォールバック
   // させず明示 error に倒す。camelCase lengthMm は通り、snake length_mm は geometry.unsupported_request_field。

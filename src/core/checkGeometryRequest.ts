@@ -5,8 +5,8 @@ import { statusForDiagnostics } from "./checkSvgPath.ts";
 import { errorReport, targetFor, targetPairFor } from "./geometry-request/reports.ts";
 import { resolveTarget } from "./geometry-request/resolveTarget.ts";
 import type { Sources } from "./geometry-request/resolveTarget.ts";
-import { toleranceOptions, validateTolerance } from "./geometry-request/tolerance.ts";
-import { rejectDeprecatedFieldCasing } from "./geometry-request/validateRequest.ts";
+import { toleranceOptions } from "./geometry-request/tolerance.ts";
+import { validateCheckContract } from "./geometry-request/validateRequest.ts";
 import { checkPathByFormat } from "./geometry-request/kinds/pathPair.ts";
 import { checkGatheredSeam } from "./geometry-request/kinds/gatheredSeam.ts";
 import { checkSharedEdgeSeam } from "./geometry-request/kinds/seamEdge.ts";
@@ -36,16 +36,11 @@ export function checkGeometryRequest(
 }
 
 function checkOne(request: GeometryCheckRequest, check: GeometryCheckSpec, sources: Sources): CheckReport {
-  // camelCase 一本化後、旧 snake_case キーは黙って無視され既定へフォールバックする（confidently-wrong）。
-  // 測定へ進める前に明示 error に倒し、camelCase への移行を促す。
-  const casingError = rejectDeprecatedFieldCasing(check);
-  if (casingError) {
-    return casingError;
-  }
-
-  const toleranceError = validateTolerance(check);
-  if (toleranceError) {
-    return toleranceError;
+  // request 境界の契約検証（旧 snake_case キー・不正 scalar tolerance 値・range tolerance）。
+  // 測定へ進める前に、silent なフォールバックにせず明示 error へ倒す。
+  const contractError = validateCheckContract(check);
+  if (contractError) {
+    return contractError;
   }
 
   const from = resolveTarget(request, check, check.from, sources);
