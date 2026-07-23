@@ -114,8 +114,9 @@ interface GeometryRequestReport {
 
 - 長さ系は共有座標フレームを要さないので cross-source を許す。位置系（`smooth-continuation`）は
   共有原点を要するため同一ソースに限る（別ソース指定は `geometry.cross_source_check_unsupported`）。
-- tolerance は camelCase / snake_case の両方を受け付ける（`lengthMm` / `length_mm`、`easeRatio` /
-  `ease_ratio` など）。marker range も `startMarker` / `start_marker` の両表記に対応する。
+- tolerance と marker range は camelCase（`lengthMm`・`easeRatio`・`startMarker` など）で渡す。
+  以前は Loomit documented YAML 互換で snake_case も受けていたが、Loomit の createGeometryRequest が
+  camelCase を emit するようになったため camelCase に一本化した。
 
 ## self-contained request の最小例
 

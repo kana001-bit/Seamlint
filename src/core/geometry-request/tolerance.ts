@@ -7,10 +7,10 @@ import type { CheckOptions, CheckReport, GeometryCheckSpec, GeometryTolerance } 
 export function toleranceOptions(check: GeometryCheckSpec): Partial<CheckOptions> {
   const tolerance: GeometryTolerance = check.tolerance ?? {};
   return {
-    lengthToleranceMm: tolerance.lengthMm ?? tolerance.length_mm,
-    endpointToleranceMm: tolerance.endpointMm ?? tolerance.endpoint_mm,
-    tangentToleranceDeg: tolerance.tangentDeg ?? tolerance.tangent_deg,
-    angleThresholdDeg: tolerance.angleDeg ?? tolerance.angle_deg,
+    lengthToleranceMm: tolerance.lengthMm,
+    endpointToleranceMm: tolerance.endpointMm,
+    tangentToleranceDeg: tolerance.tangentDeg,
+    angleThresholdDeg: tolerance.angleDeg,
     easeRatioRange: check.kind === "eased-seam" ? normalizeRatioRange(rawEaseRatio(check)) : undefined
   };
 }
@@ -64,15 +64,15 @@ export function validateTolerance(check: GeometryCheckSpec): CheckReport | null 
 
 // band-seam の closure 許容（camelCase / snake_case）。未指定なら matcher 既定（6%）に委ねる。
 export function bandClosureRatio(check: GeometryCheckSpec): number | undefined {
-  return check.tolerance?.closureRatio ?? check.tolerance?.closure_ratio;
+  return check.tolerance?.closureRatio;
 }
 
 export function rawEaseRatio(check: GeometryCheckSpec): readonly [number, number] | undefined {
-  return check.tolerance?.easeRatio ?? check.tolerance?.ease_ratio;
+  return check.tolerance?.easeRatio;
 }
 
 export function rawGatherRatio(check: GeometryCheckSpec): readonly [number, number] | undefined {
-  return check.tolerance?.gatherRatio ?? check.tolerance?.gather_ratio;
+  return check.tolerance?.gatherRatio;
 }
 
 export function normalizeRatioRange(value: readonly [number, number] | undefined): readonly [number, number] | undefined {

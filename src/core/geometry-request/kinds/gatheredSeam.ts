@@ -97,11 +97,11 @@ export function checkGatheredSeam(
 }
 
 function rangeStartMarker(range: GeometryMarkerRange): string | undefined {
-  return range.startMarker ?? range.start_marker;
+  return range.startMarker;
 }
 
 function rangeEndMarker(range: GeometryMarkerRange): string | undefined {
-  return range.endMarker ?? range.end_marker;
+  return range.endMarker;
 }
 
 function hasCompleteGatherRange(range: GeometryCheckRange): boolean {

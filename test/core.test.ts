@@ -451,7 +451,7 @@ test("reports eased seams whose length ratio falls outside the configured range"
         kind: "eased-seam",
         from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
         to: { partId: "sleeve", pathRef: "sleeve_cap", connectorId: "sleeve_cap" },
-        tolerance: { ease_ratio: [0.02, 0.08], length_mm: 1 }
+        tolerance: { easeRatio: [0.02, 0.08], lengthMm: 1 }
       }
     ]
   }, {
@@ -643,9 +643,8 @@ test("accepts gathered seams across two SVG sources when both marker ranges are 
   assert.deepEqual(report.diagnostics, []);
 });
 
-test("accepts gathered seam ranges written in the documented snake_case shape", () => {
-  // 仕様保護: Loomit integration doc の YAML は start_marker / end_marker を使う。
-  // request contract は snake_case tolerance を既に受けているので、range shape も合わせて受ける。
+test("accepts gathered seam ranges with an in-range gather ratio", () => {
+  // 仕様保護: gathered-seam は marker range を両側で解決して弧長を測り、in-range の gather 比なら ok。
   const report = checkGeometryRequest({
     projectRoot: ".",
     parts: [
@@ -679,10 +678,10 @@ test("accepts gathered seam ranges written in the documented snake_case shape", 
         from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
         to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
         range: {
-          from: { start_marker: "gather_start", end_marker: "gather_end" },
-          to: { start_marker: "seam_start", end_marker: "seam_end" }
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
         },
-        tolerance: { gather_ratio: [1.2, 1.4] }
+        tolerance: { gatherRatio: [1.2, 1.4] }
       }
     ]
   }, {
@@ -731,7 +730,7 @@ test("reports gathered seams whose ratio falls outside the configured range", ()
           from: { startMarker: "gather_start", endMarker: "gather_end" },
           to: { startMarker: "seam_start", endMarker: "seam_end" }
         },
-        tolerance: { gather_ratio: [1.4, 1.8] }
+        tolerance: { gatherRatio: [1.4, 1.8] }
       }
     ]
   }, {
@@ -1943,9 +1942,9 @@ test("maps malformed SVG path data to invalid_svg_path rather than an unclassifi
   assert.equal(report.diagnostics[0].target, "body.armhole");
 });
 
-test("honours a snake_case angle_deg tolerance on a request-level closed-loop check", () => {
-  // 仕様保護（snake_case 契約）: request は Loomit documented YAML の snake_case tolerance を受ける。angle_deg を
-  // 尊重していれば、角のある閉ループでも閾値 179° で curve_kink を抑止できる（無視されれば既定 25° で鳴る）。
+test("honours a request-level angleDeg tolerance on a closed-loop check", () => {
+  // 仕様保護: request の angleDeg tolerance を尊重していれば、角のある閉ループでも閾値 179° で curve_kink を
+  // 抑止できる（無視されれば既定 25° で鳴る）。closed-loop 経路での request-level angleDeg のカバレッジ。
   const svg = `<svg xmlns="http://www.w3.org/2000/svg"><path id="tri" d="M 0 0 L 40 0 L 40 40 Z" /></svg>`;
   const report = checkGeometryRequest({
     projectRoot: ".",
@@ -1963,7 +1962,7 @@ test("honours a snake_case angle_deg tolerance on a request-level closed-loop ch
         id: "loop",
         kind: "closed-loop",
         from: { partId: "body", pathRef: "edge", connectorId: "edge" },
-        tolerance: { angle_deg: 179 }
+        tolerance: { angleDeg: 179 }
       }
     ]
   }, {
@@ -1974,9 +1973,9 @@ test("honours a snake_case angle_deg tolerance on a request-level closed-loop ch
   assert.deepEqual(report.diagnostics, []);
 });
 
-test("honours snake_case endpoint_mm and tangent_deg on a request-level smooth-continuation check", () => {
-  // 仕様保護（snake_case 契約）: request は endpoint_mm / tangent_deg も snake_case で受ける。両方を尊重していれば、
-  // 隙間 ~2.8mm・角 ~22° の join でも十分ゆるい許容で通る（片方でも無視されれば endpoint_gap / tangent_mismatch が鳴る）。
+test("honours request-level endpointMm and tangentDeg on a smooth-continuation check", () => {
+  // 仕様保護: request の endpointMm / tangentDeg を両方尊重していれば、隙間 ~2.8mm・角 ~22° の join でも
+  // 十分ゆるい許容で通る（片方でも無視されれば endpoint_gap / tangent_mismatch が鳴る）。
   const svg = `<svg xmlns="http://www.w3.org/2000/svg">
     <path id="upper" d="M 0 0 L 10 0" />
     <path id="lower" d="M 12 2 L 22 6" />
@@ -1998,7 +1997,7 @@ test("honours snake_case endpoint_mm and tangent_deg on a request-level smooth-c
         kind: "smooth-continuation",
         from: { partId: "body", pathRef: "upper", connectorId: "upper" },
         to: { partId: "body", pathRef: "lower", connectorId: "lower" },
-        tolerance: { endpoint_mm: 5, tangent_deg: 45 }
+        tolerance: { endpointMm: 5, tangentDeg: 45 }
       }
     ]
   }, {
