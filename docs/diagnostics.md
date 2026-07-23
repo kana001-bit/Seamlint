@@ -131,8 +131,9 @@ severity はスタイルではなく安全境界である。
 #### 辺の機械可読アドレス（Seamlint の一次出力）
 
 `structuralEdges` を通る DXF 診断は、`actual` に **辺のアドレス** `{ blockName, edgeId, arcRange }` を
-additive に載せる。これは Seamlint 自身の辺住所で、`slnt edges` が返す `edges[].{ blockName, edgeId, arcRange }`
-と **同一の契約**（構造辺モデルの正本）。下流の消費側（Truer 等）は、この住所から診断 → 編集対象の辺を
+additive に載せる。これは Seamlint 自身の辺住所で、`slnt edges` の出力（**トップレベルの `blockName`** ＋
+各 `edges[].{ edgeId, arcRange }`）を組み合わせたもの（同じ構造辺モデルが正本。`slnt edges` の各 edge に
+`blockName` は無い）。下流の消費側（Truer 等）は、この住所から診断 → 編集対象の辺を
 再導出せずに解決できる（Truer では ProposalTarget / SeamEdge に写る）。所有は Seamlint、Truer は消費側。
 
 - `geometry.seam_length_mismatch`（DXF seam-edge） / `geometry.seam_edge_matched` → `actual.fromEdge` / `actual.toEdge`

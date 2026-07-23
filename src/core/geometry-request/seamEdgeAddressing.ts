@@ -1,5 +1,5 @@
 // 診断に「機械可読な構造辺の住所」を additive に足すユーティリティ群。住所は Seamlint 自身の一次出力で、
-// `slnt edges` が返す edges[].{blockName, edgeId, arcRange} と同一の辺住所契約（構造辺モデルの正本）。
+// `slnt edges` の出力（トップレベル blockName ＋ 各 edges[].{edgeId, arcRange}）を組んだ辺住所（同じ構造辺モデルが正本）。
 // seam-edge / band-seam の length mismatch、DXF curve_kink の各経路が共有する。下流の消費側（Truer 等）は
 // この住所から診断→辺を再導出せず解決できる（Truer では ProposalTarget/SeamEdge に写る）。docs/diagnostics.md 参照。
 // arcRange は測定値ではなく正規化 address なので丸めない（Codex P2）。住所が取れない場合は捏造せず省く。
@@ -7,8 +7,9 @@ import { locateInteriorEdge, structuralEdges } from "../../geometry/structuralEd
 import type { StructuralEdgesResult } from "../../geometry/structuralEdges.ts";
 import type { Diagnostic, Point } from "../../types.ts";
 
-// Seamlint の構造辺の機械可読な住所（一次出力・公開契約）。`slnt edges` の edges[].{blockName, edgeId, arcRange}
-// と同形で、下流の消費側（Truer 等）はこれをそのまま辺参照に使える（Truer の ProposalTarget / SeamEdge に 1:1 で写る）。
+// Seamlint の構造辺の機械可読な住所（一次出力・公開契約）。`slnt edges` の出力（トップレベル blockName ＋
+// 各 edges[].{edgeId, arcRange}）と同源で、下流の消費側（Truer 等）はそのまま辺参照に使える（Truer の
+// ProposalTarget / SeamEdge に 1:1 で写る）。
 // arcRange は Seamlint 正規化（原点=最初の角・0..1・start<end）のまま。辺が取れなければ undefined（住所を捏造しない）。
 export interface SeamEdgeAddress {
   blockName: string;

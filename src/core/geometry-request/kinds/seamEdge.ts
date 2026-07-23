@@ -68,7 +68,7 @@ export function checkSharedEdgeSeam(
     }
   );
 
-  // DXF seam-edge は共有辺の機械可読な住所（blockName + edgeId + arcRange = Seamlint の一次出力・`slnt edges` と同形）を持つ。
+  // DXF seam-edge は共有辺の機械可読な住所（blockName + edgeId + arcRange。`slnt edges` のトップレベル blockName と各辺の edgeId/arcRange と同源）を持つ。
   // length mismatch 診断に両辺の住所を additive で載せ、下流の消費側（Truer 等）が診断 → 編集対象の辺を再導出せず
   // 解決できるようにする（Truer では ProposalTarget/SeamEdge に写る）。契約は docs/diagnostics.md。
   // sewn-seam の whole-path 経路は構造辺を持たないので付けない（false な住所を作らない）。
