@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DxfPathError, extractAstmCutQuantity, extractAstmNotchPoints } from "../src/geometry/dxfPath.ts";
 import { locateInteriorEdge, structuralEdges } from "../src/geometry/structuralEdges.ts";
+import { matchBandSubrange } from "../src/geometry/bandSubrangeSeam.ts";
 import { polylineLength } from "../src/geometry/vector.ts";
 import type { Point } from "../src/types.ts";
 
@@ -285,6 +286,12 @@ test("extractAstmNotchPoints excludes the QA duplicate layers (84-87) and anchor
 
 const WAIST_DXF = readFileSync(new URL("./fixtures/real-waist-astm.dxf", import.meta.url), "utf8");
 const KNICKERS_DXF = readFileSync(new URL("./fixtures/real-cycling-knickers-astm.dxf", import.meta.url), "utf8");
+// 較正母数を増やすための実データ（指摘3）: 上と同じ cycling knickers を Valentina で再 export し、
+// ウエストバンドだけ意図的に長くした版（band 860mm vs opening 655mm）。band 照合の「捕まえるべき失敗」側を固定する。
+const KNICKERS_WB_MISMATCH_DXF = readFileSync(
+  new URL("./fixtures/real-cycling-knickers-wb-mismatch-astm.dxf", import.meta.url),
+  "utf8"
+);
 
 test("reproduces a real dart-free block's net-line perimeter as the sum of its edges", () => {
   // 仕様保護: dart の無い実ブロックでは畳み込み後の周長 == net line 周長。real-dxf.test.ts が固定する
@@ -364,6 +371,37 @@ test("reconciles the waistband length against the summed, cut-quantity-scaled pi
   // band は全周の合計に対して ~4% 大きいだけ（ギャザー/タックではない fitted band）。
   const ratio = bandEdge.lengthMm / totalWaistOpening;
   assert.ok(ratio > 1 && ratio < 1.06, `band/opening ratio ${ratio.toFixed(3)} (opening ${totalWaistOpening.toFixed(0)}mm)`);
+});
+
+test("catches a deliberately mismatched waistband on real data: band 860 vs opening 655 does not reconcile", () => {
+  // 仕様保護（指摘3・較正の反対側）: 既存 fixture は reconcile する band しか無かった。わざと WB を長くした
+  // 実データで、band 照合が黙って通さず sum-mismatch を返すことを実データで固定する。band 総 860mm /
+  // opening 655mm = closure ~31%（既定 6% を大きく超える）。FRONT/BACK の腰辺検出は正常版と同一。
+  const front = structuralEdges(KNICKERS_WB_MISMATCH_DXF, "FRONT");
+  const back = structuralEdges(KNICKERS_WB_MISMATCH_DXF, "BACK");
+  const band = structuralEdges(KNICKERS_WB_MISMATCH_DXF, "WAISTBAND");
+
+  const finishedWaist = (result: typeof front) =>
+    result.edges.filter((edge) => edge.darts.length > 0).reduce((sum, edge) => sum + edge.finishedLengthMm, 0);
+  const neighbours = [
+    { finishedLengthMm: finishedWaist(front), cutQuantity: front.cutQuantity ?? 1 },
+    { finishedLengthMm: finishedWaist(back), cutQuantity: back.cutQuantity ?? 1 }
+  ];
+
+  assert.equal(band.cutQuantity, 1, "waistband should read Cut 1");
+  const match = matchBandSubrange({ edges: band.edges, cutQuantity: band.cutQuantity ?? 1 }, neighbours);
+  assert.equal(match.ok, false);
+  if (match.ok) {
+    return;
+  }
+  assert.equal(match.reason, "sum-mismatch");
+  assert.ok(match.measure !== null, "sum-mismatch should carry the measured trace");
+  assert.ok(
+    (match.measure?.closurePct ?? 0) > 0.06,
+    `closure ${((match.measure?.closurePct ?? 0) * 100).toFixed(1)}% should exceed the 6% default`
+  );
+  assert.ok(Math.abs((match.measure?.bandTotalMm ?? 0) - 860) < 2, `band total ${match.measure?.bandTotalMm}`);
+  assert.ok(Math.abs((match.measure?.sumMm ?? 0) - 655) < 2, `opening sum ${match.measure?.sumMm}`);
 });
 
 test("exposes each edge's net-line points, including intermediate vertices on a bent edge", () => {
