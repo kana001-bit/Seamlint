@@ -65,6 +65,38 @@ test("measures every real ASTM block's layer 14 net line at its known length", (
   }
 });
 
+test("resolves a real DXF part with format omitted by sniffing it as dxf, not svg", () => {
+  // 仕様保護（指摘7）: format を省略した DXF は中身から dxf と判定して DXF parser へ回す（従来の svg 既定だと
+  // SVG parser が誤爆した）。宣言 dxf と同じ FRONT net line が測れることで sniff の正しさを守る。
+  const report = checkGeometryRequest({
+    parts: [
+      {
+        partId: "front",
+        geometrySource: "./waist.dxf",
+        unit: "mm",
+        scale: 1,
+        paths: {},
+        geometryText: REAL_DXF
+      }
+    ],
+    checks: [
+      {
+        id: "loop:FRONT",
+        kind: "closed-loop",
+        from: { partId: "front", pathRef: "FRONT", connectorId: "FRONT" },
+        tolerance: { angleDeg: 179 }
+      }
+    ]
+  });
+
+  const one = report.reports[0];
+  assert.equal(one.status, "ok", `omitted-format FRONT should measure ok, got ${one.status}: ${JSON.stringify(one.diagnostics)}`);
+  assert.ok(
+    Math.abs((one.lengthMm ?? Number.NaN) - EXPECTED_NET_LINE_MM.FRONT) < 0.5,
+    `FRONT net line ${one.lengthMm} mm should be ~${EXPECTED_NET_LINE_MM.FRONT} mm`
+  );
+});
+
 test("measures the FRONT net line, not the outer cut line", () => {
   // 仕様保護: layer 14（内側 = 縫い線）を測ること。layer 1（外側 = 裁断線 ~1519mm）へ取り違えて
   // いないことを、cut line より明確に短いことで守る。angleDeg:179 は上と同じく kink 分離のため。

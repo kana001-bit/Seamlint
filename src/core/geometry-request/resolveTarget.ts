@@ -48,23 +48,52 @@ export function resolveTarget(
     return { error: unitError };
   }
 
-  const format = geometryFormatFor(part);
-  const formatError = validatePartFormat(check, part, format);
-  if (formatError) {
-    return { error: formatError };
+  // declared format（svg|dxf|undefined 以外）の妥当性は text より先に検査（既存の error 順序を保つ）。
+  // part.format は型上 GeometryFormat|undefined だが request は untrusted（"stl" 等が来うる）ので string で扱う。
+  const declaredFormat = part.format as string | undefined;
+  if (declaredFormat !== undefined && declaredFormat !== "svg" && declaredFormat !== "dxf") {
+    return {
+      error: formatErrorReport(
+        check,
+        part.partId,
+        `Geometry part "${part.partId}" uses unsupported format "${declaredFormat}".`,
+        declaredFormat
+      )
+    };
   }
 
-  const source = resolveGeometrySource(part, sources, format as GeometryFormat);
-  if (!source) {
+  const text = resolveGeometryText(part, sources);
+  if (text === undefined) {
     return {
       error: errorReport(
         check,
         targetFor(target),
         "geometry.source_not_loaded",
-        `Geometry source "${part.geometrySource}" (${format}) was not provided to Seamlint.`
+        `Geometry source "${part.geometrySource}" (${declaredFormat ?? "svg"}) was not provided to Seamlint.`
       )
     };
   }
+
+  // format は宣言があればそれ、無ければ中身から sniff（判別不能なら従来どおり svg 既定）。宣言と中身が
+  // 明確に食い違うときだけ mismatch error に倒す（sniff=null は宣言を信頼して false positive を避ける）。
+  const sniffed = sniffFormat(text);
+  let format: GeometryFormat;
+  if (declaredFormat === undefined) {
+    format = sniffed ?? "svg";
+  } else if (sniffed !== null && sniffed !== declaredFormat) {
+    return {
+      error: errorReport(
+        check,
+        part.partId,
+        "geometry.geometry_format_mismatch",
+        `Geometry part "${part.partId}" declares format "${declaredFormat}" but its geometry content looks like "${sniffed}".`
+      )
+    };
+  } else {
+    format = declaredFormat as GeometryFormat;
+  }
+
+  const source: ResolvedGeometrySource = { format, text };
 
   const pathId = pathIdFor(part, target.pathRef);
   if (!pathId) {
@@ -96,35 +125,23 @@ function validatePartUnits(check: GeometryCheckSpec, part: GeometryPartRef): Che
   return null;
 }
 
-function validatePartFormat(check: GeometryCheckSpec, part: GeometryPartRef, format: string): CheckReport | null {
-  if (format === "svg" || format === "dxf") {
-    return null;
-  }
-
-  return formatErrorReport(
-    check,
-    part.partId,
-    `Geometry part "${part.partId}" uses unsupported format "${format}".`,
-    format
-  );
-}
-
-// inline geometryText / svgText / sources[geometrySource] の順で source テキストを解決する。
-function resolveGeometrySource(part: GeometryPartRef, sources: Sources, format: GeometryFormat): ResolvedGeometrySource | null {
+// inline geometryText / svgText / sources[geometrySource] の順で source テキストを解決する（format 非依存）。
+// 空文字・未ロードは undefined（旧 resolveGeometrySource の `!text` 判定を保つ）。
+function resolveGeometryText(part: GeometryPartRef, sources: Sources): string | undefined {
   const text = part.geometryText ?? part.svgText ?? sources[part.geometrySource];
-  if (!text) {
-    return null;
-  }
-
-  return {
-    format,
-    text
-  };
+  return text ? text : undefined;
 }
 
-// 非 SVG parser が入るまでは、format 省略時に "svg" として扱う（既存挙動）。
-function geometryFormatFor(part: GeometryPartRef): string {
-  return part.format ?? "svg";
+// geometry 本文から format を推定する。SVG は `<svg` タグ、ASTM DXF は group-code の "SECTION" 行を持つ
+// （実 fixture で確認: DXF に `<svg` は無く、SVG に "SECTION" 行は無い）。どちらとも判別できなければ null。
+function sniffFormat(text: string): GeometryFormat | null {
+  if (/<svg[\s/>]/i.test(text)) {
+    return "svg";
+  }
+  if (/^\s*SECTION\s*$/m.test(text)) {
+    return "dxf";
+  }
+  return null;
 }
 
 // pathRef を実 path id へ正規化する。part.paths のエイリアスを引き、先頭 "#" を落とす。

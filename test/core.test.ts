@@ -815,6 +815,77 @@ test("accepts valid scalar tolerances at the request boundary (does not over-rej
   assert.deepEqual(report.diagnostics, []);
 });
 
+test("rejects a part whose declared format contradicts its content (svg declared, dxf content)", () => {
+  // 仕様保護（指摘7・confidently-wrong 防止）: format:"svg" なのに中身が DXF なら、SVG parser に流して誤爆させず
+  // 明示 error（geometry.geometry_format_mismatch）に倒す。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern",
+        format: "svg",
+        unit: "mm",
+        scale: 1,
+        paths: { edge: "outline" },
+        geometryText: "  0\nSECTION\n  2\nENTITIES\n  0\nENDSEC\n"
+      }
+    ],
+    checks: [{ id: "loop", kind: "closed-loop", from: { partId: "body", pathRef: "edge", connectorId: "edge" } }]
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.geometry_format_mismatch");
+});
+
+test("rejects a part whose declared format contradicts its content (dxf declared, svg content)", () => {
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern",
+        format: "dxf",
+        unit: "mm",
+        scale: 1,
+        paths: { edge: "tri" },
+        geometryText: `<svg xmlns="http://www.w3.org/2000/svg"><path id="tri" d="M 0 0 L 40 0 L 40 40 Z" /></svg>`
+      }
+    ],
+    checks: [{ id: "loop", kind: "closed-loop", from: { partId: "body", pathRef: "edge", connectorId: "edge" } }]
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.geometry_format_mismatch");
+});
+
+test("sniffs an omitted format as svg from the content and measures normally", () => {
+  // 仕様保護（指摘7）: format 省略 + SVG 中身 → svg と判定して従来どおり測れる（omitted-svg の回帰）。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "body",
+        geometrySource: "./pattern",
+        unit: "mm",
+        scale: 1,
+        paths: { edge: "tri" },
+        geometryText: `<svg xmlns="http://www.w3.org/2000/svg"><path id="tri" d="M 0 0 L 40 0 L 40 40 Z" /></svg>`
+      }
+    ],
+    checks: [
+      {
+        id: "loop",
+        kind: "closed-loop",
+        from: { partId: "body", pathRef: "edge", connectorId: "edge" },
+        tolerance: { angleDeg: 179 }
+      }
+    ]
+  });
+
+  assert.equal(report.reports[0].status, "ok");
+});
+
 test("rejects a snake_case tolerance field with an explicit migration error, not a silent default", () => {
   // 仕様保護（confidently-wrong 防止）: camelCase 一本化後、snake_case tolerance を黙って既定へフォールバック
   // させず明示 error に倒す。camelCase lengthMm は通り、snake length_mm は geometry.unsupported_request_field。
