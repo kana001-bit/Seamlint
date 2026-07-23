@@ -34,6 +34,7 @@ mismatches, ease and gather ratios, and open loops.
 - [Technology Selection](./technology-selection.md) — 技術選定と依存方針（依存ゼロの MVP）
 - [SVG & Format Compatibility](./svg-compatibility.md) — 座標前提、対応コマンド、明示的に reject する入力
 - [Loomit Integration](./loomit-integration.md) — `GeometryCheckRequest` 契約と責務分担
+- [Structural Edge Calibration](./structural-edge-calibration.md) — 構造辺ヒューリスティクスの閾値・較正根拠・確認済み margin・限界
 
 ## Development
 
