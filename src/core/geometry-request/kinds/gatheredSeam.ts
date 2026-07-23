@@ -151,13 +151,26 @@ function resolveMarkerRange(
     };
   }
 
-  if (!validMarkerPosition(startMarker.position) || !validMarkerPosition(endMarker.position) || startMarker.position >= endMarker.position) {
+  // 不正な position 値（非有限・0..1 外・文字列など untrusted JSON 由来）は、反転 range と別の明示 code に分ける。
+  // marker.position は型上 number だが request は untrusted。無効値を黙って通さず geometry.invalid_marker_position に倒す。
+  if (!validMarkerPosition(startMarker.position) || !validMarkerPosition(endMarker.position)) {
+    return {
+      error: errorReport(
+        check,
+        targetPairFor(check),
+        "geometry.invalid_marker_position",
+        `Gathered seam check "${check.id}" uses a ${side} marker position that is not a finite number in [0, 1].`
+      )
+    };
+  }
+
+  if (startMarker.position >= endMarker.position) {
     return {
       error: errorReport(
         check,
         targetPairFor(check),
         "geometry.gather_markers_inconsistent",
-        `Gathered seam check "${check.id}" uses ${side} markers with invalid or reversed positions.`
+        `Gathered seam check "${check.id}" uses ${side} markers whose start position is not before its end.`
       )
     };
   }

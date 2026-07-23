@@ -1023,6 +1023,104 @@ test("reports inconsistent gathered seam markers instead of measuring the wrong 
   assert.equal(report.diagnostics[0].code, "geometry.gather_markers_inconsistent");
 });
 
+test("rejects a marker position outside [0,1] with a dedicated invalid_marker_position error", () => {
+  // 仕様保護（confidently-wrong 防止）: 不正な marker.position（0..1 外・非有限・文字列）を、反転 range と区別して
+  // 明示 error（geometry.invalid_marker_position）に倒す。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1.5 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.invalid_marker_position");
+});
+
+test("still reports reversed (but in-range) marker positions as gather_markers_inconsistent", () => {
+  // 仕様保護: position 自体は valid だが start >= end の反転は range 論理の問題。invalid_marker_position ではなく
+  // gather_markers_inconsistent のまま（分割で取り違えないこと）。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0.8 },
+          gather_end: { pathRef: "cap", position: 0.2 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
+        }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.gather_markers_inconsistent");
+});
+
 test("reports an invalid gather ratio range instead of silently ignoring it", () => {
   // 仕様保護: gathered-seam の ratio 境界は geometry を測る前に検証する。
   const report = checkGeometryRequest({

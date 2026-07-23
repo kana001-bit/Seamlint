@@ -94,7 +94,8 @@ severity はスタイルではなく安全境界である。
 | `geometry.unsupported_scale` | error | part の `scale` が 1 以外 |
 | `geometry.invalid_dxf_path` | error | DXF path の抽出に失敗（ASTM block / layer 14 の解決不能など） |
 | `geometry.gather_range_missing` | error | gathered-seam に両側の marker range が無い |
-| `geometry.gather_markers_inconsistent` | error | gather の marker が 1 本の連続 range に解決できない／位置が不正・反転 |
+| `geometry.gather_markers_inconsistent` | error | gather の marker が 1 本の連続 range に解決できない／別 path を指す／start が end より後（反転） |
+| `geometry.invalid_marker_position` | error | marker の `position` が有限数 [0,1] でない（非有限・範囲外・文字列など。反転 range とは区別する） |
 
 > `unsupported_unit` / `unsupported_scale` は **宣言の検査であって実座標の検証ではない**。
 > `unit: "mm"` / `scale: 1` と宣言されていても、実際の座標が別 scale なら cross-source 比較は
