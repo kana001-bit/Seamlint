@@ -292,6 +292,10 @@ const KNICKERS_WB_MISMATCH_DXF = readFileSync(
   new URL("./fixtures/real-cycling-knickers-wb-mismatch-astm.dxf", import.meta.url),
   "utf8"
 );
+// 新しい構造の実 garment（指摘3・n-増加）。foundation skirt（facing 付き・front-and-side 連結 panel・gored back）と
+// collar（小さい曲線ピース）。既存（スカート腰 + knickers）に無い dart 幅/panel 成形/曲線ピースで閾値を stress する。
+const FOUNDATION_SKIRT_DXF = readFileSync(new URL("./fixtures/real-foundation-skirt-astm.dxf", import.meta.url), "utf8");
+const COLLAR_DXF = readFileSync(new URL("./fixtures/real-collar-astm.dxf", import.meta.url), "utf8");
 
 test("reproduces a real dart-free block's net-line perimeter as the sum of its edges", () => {
   // 仕様保護: dart の無い実ブロックでは畳み込み後の周長 == net line 周長。real-dxf.test.ts が固定する
@@ -402,6 +406,39 @@ test("catches a deliberately mismatched waistband on real data: band 860 vs open
   );
   assert.ok(Math.abs((match.measure?.bandTotalMm ?? 0) - 860) < 2, `band total ${match.measure?.bandTotalMm}`);
   assert.ok(Math.abs((match.measure?.sumMm ?? 0) - 655) < 2, `opening sum ${match.measure?.sumMm}`);
+});
+
+test("real foundation-skirt front-and-side keeps only the true ~38mm dart, excluding ~115mm panel shaping", () => {
+  // 較正の裏づけ（指摘3）: この panel には mouth ~38mm の本物の dart が 1 本と、mouth ~115mm の広い panel 成形が
+  // ある。既定 mouth<60mm は 38 を dart として拾い 115 を除外する（38 と 115 の間に 60 が余裕をもって入る）。
+  // 115 を dart 扱いすると finished 長が誤って縮む。新 garment で threshold の分離が効くことを固定する。
+  const result = structuralEdges(FOUNDATION_SKIRT_DXF, "FRONT_AND_SIDE");
+  const darts = result.edges.flatMap((edge) => edge.darts);
+  assert.equal(darts.length, 1, "only the true dart, not the wide panel-shaping folds");
+  assert.ok(darts[0].mouthMm < 60, `dart mouth ${darts[0].mouthMm.toFixed(0)}mm should sit under the 60mm default`);
+  assert.ok(Math.abs(darts[0].mouthMm - 38) < 4, `dart mouth ${darts[0].mouthMm.toFixed(0)}mm should be ~38`);
+  assert.equal(result.edges.length, 10);
+});
+
+test("real foundation-skirt back is a dartless (gored) panel even under looser thresholds", () => {
+  // 較正の裏づけ: 剣先の無い gored back。dart は 0 が正（誤検出しない）。閾値を緩めても現れないことも確認する。
+  const result = structuralEdges(FOUNDATION_SKIRT_DXF, "BACK");
+  assert.equal(result.edges.filter((edge) => edge.darts.length > 0).length, 0);
+  assert.equal(result.edges.length, 4);
+  const loose = structuralEdges(FOUNDATION_SKIRT_DXF, "BACK", { dartFoldDeg: 90, dartMaxMouthMm: 120 });
+  assert.equal(loose.edges.filter((edge) => edge.darts.length > 0).length, 0, "no hidden darts even when loosened");
+});
+
+test("real collar piece resolves to a clean 3-edge outline with no false darts or notches", () => {
+  // 較正の裏づけ（false-positive 耐性）: 小さい曲線ピース（collar）で dart / notch を誤検出しないこと。
+  // 現 fixture に無いピース型で、曲線を dart や notch と取り違えないことを実データで固定する。
+  const result = structuralEdges(COLLAR_DXF, "BACK_CLOSING_COLLAR");
+  assert.equal(result.edges.length, 3);
+  assert.equal(result.edges.filter((edge) => edge.darts.length > 0).length, 0);
+  assert.equal(
+    result.edges.reduce((sum, edge) => sum + edge.notches.length, 0),
+    0
+  );
 });
 
 test("exposes each edge's net-line points, including intermediate vertices on a bent edge", () => {
