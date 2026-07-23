@@ -56,7 +56,7 @@ interface GeometryCheckRequest {
 interface GeometryPartRef {
   partId: string;
   geometrySource: string;     // 参照ラベル（inline があれば読取りには使わない）
-  format?: GeometryFormat;    // "svg" | "dxf"（省略時 svg）
+  format?: GeometryFormat;    // "svg" | "dxf"（省略時は中身から sniff、判別不能なら svg。宣言と中身の不一致は geometry_format_mismatch）
   unit: string;               // "mm" のみ
   scale: number;              // 1 のみ
   paths: Record<string, string>;          // pathRef -> "#id"（SVG）/ BLOCK 名（DXF）

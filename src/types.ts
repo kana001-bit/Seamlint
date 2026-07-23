@@ -144,7 +144,7 @@ export type GeometryFormat = "svg" | "dxf";
 export interface GeometryPartRef {
   partId: string;
   geometrySource: string;
-  format?: GeometryFormat; // 非 SVG parser が入るまでは、省略時に "svg" として扱う。
+  format?: GeometryFormat; // 省略時は geometryText の中身から sniff（判別不能なら "svg" 既定）。宣言と中身が食い違えば geometry_format_mismatch。
   unit: string; // MVP request adapter では "mm" のみを受け付ける。
   scale: number; // MVP request adapter では scale 1 のみを受け付ける。
   paths: Record<string, string>;
