@@ -128,10 +128,12 @@ severity はスタイルではなく安全境界である。
 > **dart 畳み辺**（fitted band は dart で成形＝唯一の darted 辺が接辺）を幾何から選ぶ。dart 辺が
 > 0/複数なら黙って推測せず `band_neighbour_edge_unresolved` で defer する。
 
-#### 辺の機械可読アドレス（下流 = Truer 向け）
+#### 辺の機械可読アドレス（Seamlint の一次出力）
 
 `structuralEdges` を通る DXF 診断は、`actual` に **辺のアドレス** `{ blockName, edgeId, arcRange }` を
-additive に載せる。下流（Truer 等）が診断から編集対象の辺を再導出せずに解決できるようにするため。
+additive に載せる。これは Seamlint 自身の辺住所で、`slnt edges` が返す `edges[].{ blockName, edgeId, arcRange }`
+と **同一の契約**（構造辺モデルの正本）。下流の消費側（Truer 等）は、この住所から診断 → 編集対象の辺を
+再導出せずに解決できる（Truer では ProposalTarget / SeamEdge に写る）。所有は Seamlint、Truer は消費側。
 
 - `geometry.seam_length_mismatch`（DXF seam-edge） / `geometry.seam_edge_matched` → `actual.fromEdge` / `actual.toEdge`
 - `geometry.band_seam_matched` / `geometry.band_seam_sum_mismatch` → `actual.bandEdge`（band 周方向辺）＋
