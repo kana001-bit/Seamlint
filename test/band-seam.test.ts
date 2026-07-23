@@ -61,7 +61,7 @@ function bandRequest(band: BandPart, neighbours: readonly BandPart[], closureRat
     kind: "band-seam",
     from: { partId: band.partId, pathRef: "seam" },
     neighbours: neighbours.map((n) => ({ partId: n.partId, pathRef: "seam" })),
-    ...(closureRatio === undefined ? {} : { tolerance: { closure_ratio: closureRatio } })
+    ...(closureRatio === undefined ? {} : { tolerance: { closureRatio } })
   };
   return {
     parts: [dxfPart(band.partId, band.dxf, band.block), ...neighbours.map((n) => dxfPart(n.partId, n.dxf, n.block))],
@@ -120,7 +120,7 @@ test("band-seam reconciles the real WAISTBAND against FRONT+BACK waists × cut q
 });
 
 test("band-seam defers the real band with sum-mismatch under a tighter closure tolerance", () => {
-  // 仕様保護（option の両側）: 既定 6% では ok の 3.8% closure も、closure_ratio=0.03 なら閾値外 → warning。
+  // 仕様保護（option の両側）: 既定 6% では ok の 3.8% closure も、closureRatio=0.03 なら閾値外 → warning。
   // 黙って通さず、証跡（band 680 / sum 655 / closure 25）を載せて sum-mismatch で defer する。
   const report = firstReport(bandRequest(knickers("waistband", "WAISTBAND"), [knickers("front", "FRONT"), knickers("back", "BACK")], 0.03));
 

@@ -49,7 +49,7 @@ function sampleGeometryRequest() {
         kind: "sewn-seam",
         from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
         to: { partId: "sleeve", pathRef: "armhole", connectorId: "armhole" },
-        tolerance: { length_mm: 3 }
+        tolerance: { lengthMm: 3 }
       }
     ]
   };

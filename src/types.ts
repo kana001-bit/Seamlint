@@ -94,13 +94,12 @@ export interface GeometryMarkerRef {
   position: number;
 }
 
-// GeometryMarkerRange では camelCase / snake_case の両方を受け付ける。
-// Loomit documented YAML の `start_marker` / `end_marker` と互換にするため。
+// gathered-seam の marker range 端点。Loomit request contract（camelCase）。
+// 以前は Loomit documented YAML 互換で snake_case（start_marker 等）も受けていたが、Loomit の
+// createGeometryRequest が camelCase を emit するようになったため camelCase に一本化した。
 export interface GeometryMarkerRange {
   startMarker?: string;
   endMarker?: string;
-  start_marker?: string;
-  end_marker?: string;
 }
 
 export interface GeometryCheckRange {
@@ -108,23 +107,17 @@ export interface GeometryCheckRange {
   to: GeometryMarkerRange;
 }
 
-// request contract では camelCase / snake_case の両方を受け付ける。
+// request contract の tolerance（camelCase）。以前は snake_case（length_mm 等）も受けていたが、
+// Loomit が camelCase を emit するようになったため camelCase に一本化した。
 export interface GeometryTolerance {
   lengthMm?: number;
-  length_mm?: number;
   endpointMm?: number;
-  endpoint_mm?: number;
   tangentDeg?: number;
-  tangent_deg?: number;
   angleDeg?: number;
-  angle_deg?: number;
   easeRatio?: readonly [number, number];
-  ease_ratio?: readonly [number, number];
   gatherRatio?: readonly [number, number];
-  gather_ratio?: readonly [number, number];
   // band-seam の closure/ease 許容（バンド総周長と隣接合計の相対差の上限）。省略時は matcher 既定 6%。
   closureRatio?: number;
-  closure_ratio?: number;
 }
 
 // seam-edge の per-connector 識別子。connector が宣言する「その seam の合印(notch)数」を運ぶ。

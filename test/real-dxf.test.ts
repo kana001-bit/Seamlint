@@ -277,7 +277,7 @@ test("runs a cross-source DXF/DXF sewn-seam comparison over two separately-sourc
           kind: "sewn-seam",
           from: { partId: "first_side", pathRef: "FIRST_SIDE", connectorId: "FIRST_SIDE" },
           to: { partId: "second_side", pathRef: "SECOND_SIDE", connectorId: "SECOND_SIDE" },
-          tolerance: { length_mm: 3, angleDeg: 179 }
+          tolerance: { lengthMm: 3, angleDeg: 179 }
         }
       ]
     },
@@ -310,7 +310,7 @@ test("cross-source resolution keeps each side bound to its own source", () => {
           kind: "sewn-seam",
           from: { partId: "first_side", pathRef: "FIRST_SIDE", connectorId: "FIRST_SIDE" },
           to: { partId: "second_side", pathRef: "SECOND_SIDE", connectorId: "SECOND_SIDE" },
-          tolerance: { length_mm: 3, angleDeg: 179 }
+          tolerance: { lengthMm: 3, angleDeg: 179 }
         }
       ]
     },

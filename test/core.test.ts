@@ -12,6 +12,7 @@ import {
 } from "seamlint";
 import { checkGeometryRequest } from "../src/core/checkGeometryRequest.ts";
 import { checkSvgPath, pointsForPath } from "../src/core/checkSvgPath.ts";
+import type { GeometryMarkerRange, GeometryTolerance } from "../src/types.ts";
 
 const SVG = `
 <svg xmlns="http://www.w3.org/2000/svg">
@@ -451,7 +452,7 @@ test("reports eased seams whose length ratio falls outside the configured range"
         kind: "eased-seam",
         from: { partId: "body", pathRef: "armhole", connectorId: "armhole" },
         to: { partId: "sleeve", pathRef: "sleeve_cap", connectorId: "sleeve_cap" },
-        tolerance: { ease_ratio: [0.02, 0.08], length_mm: 1 }
+        tolerance: { easeRatio: [0.02, 0.08], lengthMm: 1 }
       }
     ]
   }, {
@@ -643,9 +644,8 @@ test("accepts gathered seams across two SVG sources when both marker ranges are 
   assert.deepEqual(report.diagnostics, []);
 });
 
-test("accepts gathered seam ranges written in the documented snake_case shape", () => {
-  // 仕様保護: Loomit integration doc の YAML は start_marker / end_marker を使う。
-  // request contract は snake_case tolerance を既に受けているので、range shape も合わせて受ける。
+test("accepts gathered seam ranges with an in-range gather ratio", () => {
+  // 仕様保護: gathered-seam は marker range を両側で解決して弧長を測り、in-range の gather 比なら ok。
   const report = checkGeometryRequest({
     projectRoot: ".",
     parts: [
@@ -679,10 +679,10 @@ test("accepts gathered seam ranges written in the documented snake_case shape", 
         from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
         to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
         range: {
-          from: { start_marker: "gather_start", end_marker: "gather_end" },
-          to: { start_marker: "seam_start", end_marker: "seam_end" }
+          from: { startMarker: "gather_start", endMarker: "gather_end" },
+          to: { startMarker: "seam_start", endMarker: "seam_end" }
         },
-        tolerance: { gather_ratio: [1.2, 1.4] }
+        tolerance: { gatherRatio: [1.2, 1.4] }
       }
     ]
   }, {
@@ -731,7 +731,7 @@ test("reports gathered seams whose ratio falls outside the configured range", ()
           from: { startMarker: "gather_start", endMarker: "gather_end" },
           to: { startMarker: "seam_start", endMarker: "seam_end" }
         },
-        tolerance: { gather_ratio: [1.4, 1.8] }
+        tolerance: { gatherRatio: [1.4, 1.8] }
       }
     ]
   }, {
@@ -741,6 +741,81 @@ test("reports gathered seams whose ratio falls outside the configured range", ()
   assert.equal(report.status, "warning");
   assert.equal(report.diagnostics[0].code, "geometry.gather_ratio_out_of_range");
   assert.equal(report.diagnostics[0].target, "sleeve.cap/cuff.seam");
+});
+
+test("rejects a snake_case tolerance field with an explicit migration error, not a silent default", () => {
+  // 仕様保護（confidently-wrong 防止）: camelCase 一本化後、snake_case tolerance を黙って既定へフォールバック
+  // させず明示 error に倒す。camelCase lengthMm は通り、snake length_mm は geometry.unsupported_request_field。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      { partId: "sleeve", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { cap: "#longer" } },
+      { partId: "cuff", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { seam: "#straight" } }
+    ],
+    checks: [
+      {
+        id: "seam",
+        kind: "sewn-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        tolerance: { length_mm: 10 } as unknown as GeometryTolerance
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_request_field");
+});
+
+test("rejects a snake_case marker range field instead of reporting the range as missing", () => {
+  // 仕様保護（confidently-wrong 防止）: snake_case の start_marker/end_marker を「range 未指定」の
+  // gather_range_missing に化けさせず、明示 error（geometry.unsupported_request_field）に倒す。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { start_marker: "gather_start", end_marker: "gather_end" } as unknown as GeometryMarkerRange,
+          to: { start_marker: "seam_start", end_marker: "seam_end" } as unknown as GeometryMarkerRange
+        }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_request_field");
 });
 
 test("reports gathered seams whose source side is shorter than the target side", () => {
@@ -1943,9 +2018,9 @@ test("maps malformed SVG path data to invalid_svg_path rather than an unclassifi
   assert.equal(report.diagnostics[0].target, "body.armhole");
 });
 
-test("honours a snake_case angle_deg tolerance on a request-level closed-loop check", () => {
-  // 仕様保護（snake_case 契約）: request は Loomit documented YAML の snake_case tolerance を受ける。angle_deg を
-  // 尊重していれば、角のある閉ループでも閾値 179° で curve_kink を抑止できる（無視されれば既定 25° で鳴る）。
+test("honours a request-level angleDeg tolerance on a closed-loop check", () => {
+  // 仕様保護: request の angleDeg tolerance を尊重していれば、角のある閉ループでも閾値 179° で curve_kink を
+  // 抑止できる（無視されれば既定 25° で鳴る）。closed-loop 経路での request-level angleDeg のカバレッジ。
   const svg = `<svg xmlns="http://www.w3.org/2000/svg"><path id="tri" d="M 0 0 L 40 0 L 40 40 Z" /></svg>`;
   const report = checkGeometryRequest({
     projectRoot: ".",
@@ -1963,7 +2038,7 @@ test("honours a snake_case angle_deg tolerance on a request-level closed-loop ch
         id: "loop",
         kind: "closed-loop",
         from: { partId: "body", pathRef: "edge", connectorId: "edge" },
-        tolerance: { angle_deg: 179 }
+        tolerance: { angleDeg: 179 }
       }
     ]
   }, {
@@ -1974,9 +2049,9 @@ test("honours a snake_case angle_deg tolerance on a request-level closed-loop ch
   assert.deepEqual(report.diagnostics, []);
 });
 
-test("honours snake_case endpoint_mm and tangent_deg on a request-level smooth-continuation check", () => {
-  // 仕様保護（snake_case 契約）: request は endpoint_mm / tangent_deg も snake_case で受ける。両方を尊重していれば、
-  // 隙間 ~2.8mm・角 ~22° の join でも十分ゆるい許容で通る（片方でも無視されれば endpoint_gap / tangent_mismatch が鳴る）。
+test("honours request-level endpointMm and tangentDeg on a smooth-continuation check", () => {
+  // 仕様保護: request の endpointMm / tangentDeg を両方尊重していれば、隙間 ~2.8mm・角 ~22° の join でも
+  // 十分ゆるい許容で通る（片方でも無視されれば endpoint_gap / tangent_mismatch が鳴る）。
   const svg = `<svg xmlns="http://www.w3.org/2000/svg">
     <path id="upper" d="M 0 0 L 10 0" />
     <path id="lower" d="M 12 2 L 22 6" />
@@ -1998,7 +2073,7 @@ test("honours snake_case endpoint_mm and tangent_deg on a request-level smooth-c
         kind: "smooth-continuation",
         from: { partId: "body", pathRef: "upper", connectorId: "upper" },
         to: { partId: "body", pathRef: "lower", connectorId: "lower" },
-        tolerance: { endpoint_mm: 5, tangent_deg: 45 }
+        tolerance: { endpointMm: 5, tangentDeg: 45 }
       }
     ]
   }, {

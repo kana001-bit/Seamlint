@@ -129,8 +129,8 @@ gathered-seam は両側の明示的な marker range と、任意の gather 比 r
 // }
 ```
 
-marker range は `startMarker`/`endMarker`（camelCase）と `start_marker`/`end_marker`
-（snake_case）の両方を受け付ける。Loomit の documented YAML と互換にするため。
+marker range は `startMarker`/`endMarker`（camelCase）で渡す。以前は snake_case（`start_marker` 等）も
+受けていたが、Loomit が camelCase を emit するようになったため camelCase に一本化した。
 
 ## `inspectSvgExport(svgText, options?)`
 
