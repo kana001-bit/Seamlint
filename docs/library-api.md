@@ -83,7 +83,8 @@ const report = checkGeometryRequest(request, {
 ソースの解決順は `part.geometryText ?? part.svgText ?? sources[part.geometrySource]`。よって
 request が inline `geometryText` を持てば、`sources` は不要（self-contained）。
 
-各 part は `format: "svg" | "dxf"` を宣言できる（省略時 `svg`）。ASTM DXF では、`pathRef` を
+各 part は `format: "svg" | "dxf"` を宣言できる（省略時は `geometryText` の中身から sniff し、判別不能なら
+`svg`。宣言と中身が食い違えば `geometry.geometry_format_mismatch`）。ASTM DXF では、`pathRef` を
 DXF `BLOCK` 名として解決し、そのブロックの閉じた `layer 14` `POLYLINE`（縫い線）を測る。
 同じブロックに閉じた `layer 1` 輪郭（裁断線）があれば、選んだ `layer 14` seam がその外側輪郭の
 内側にあることも検証する。詳細は [SVG & Format Compatibility](svg-compatibility.md)。
