@@ -12,6 +12,7 @@ import {
 } from "seamlint";
 import { checkGeometryRequest } from "../src/core/checkGeometryRequest.ts";
 import { checkSvgPath, pointsForPath } from "../src/core/checkSvgPath.ts";
+import type { GeometryMarkerRange, GeometryTolerance } from "../src/types.ts";
 
 const SVG = `
 <svg xmlns="http://www.w3.org/2000/svg">
@@ -740,6 +741,81 @@ test("reports gathered seams whose ratio falls outside the configured range", ()
   assert.equal(report.status, "warning");
   assert.equal(report.diagnostics[0].code, "geometry.gather_ratio_out_of_range");
   assert.equal(report.diagnostics[0].target, "sleeve.cap/cuff.seam");
+});
+
+test("rejects a snake_case tolerance field with an explicit migration error, not a silent default", () => {
+  // 仕様保護（confidently-wrong 防止）: camelCase 一本化後、snake_case tolerance を黙って既定へフォールバック
+  // させず明示 error に倒す。camelCase lengthMm は通り、snake length_mm は geometry.unsupported_request_field。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      { partId: "sleeve", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { cap: "#longer" } },
+      { partId: "cuff", geometrySource: "./pattern.svg", unit: "mm", scale: 1, paths: { seam: "#straight" } }
+    ],
+    checks: [
+      {
+        id: "seam",
+        kind: "sewn-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        tolerance: { length_mm: 10 } as unknown as GeometryTolerance
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_request_field");
+});
+
+test("rejects a snake_case marker range field instead of reporting the range as missing", () => {
+  // 仕様保護（confidently-wrong 防止）: snake_case の start_marker/end_marker を「range 未指定」の
+  // gather_range_missing に化けさせず、明示 error（geometry.unsupported_request_field）に倒す。
+  const report = checkGeometryRequest({
+    projectRoot: ".",
+    parts: [
+      {
+        partId: "sleeve",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { cap: "#longer" },
+        markers: {
+          gather_start: { pathRef: "cap", position: 0 },
+          gather_end: { pathRef: "cap", position: 1 }
+        }
+      },
+      {
+        partId: "cuff",
+        geometrySource: "./pattern.svg",
+        unit: "mm",
+        scale: 1,
+        paths: { seam: "#straight" },
+        markers: {
+          seam_start: { pathRef: "seam", position: 0 },
+          seam_end: { pathRef: "seam", position: 1 }
+        }
+      }
+    ],
+    checks: [
+      {
+        id: "gather",
+        kind: "gathered-seam",
+        from: { partId: "sleeve", pathRef: "cap", connectorId: "cap" },
+        to: { partId: "cuff", pathRef: "seam", connectorId: "seam" },
+        range: {
+          from: { start_marker: "gather_start", end_marker: "gather_end" } as unknown as GeometryMarkerRange,
+          to: { start_marker: "seam_start", end_marker: "seam_end" } as unknown as GeometryMarkerRange
+        }
+      }
+    ]
+  }, {
+    sources: { "./pattern.svg": SVG }
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.diagnostics[0].code, "geometry.unsupported_request_field");
 });
 
 test("reports gathered seams whose source side is shorter than the target side", () => {

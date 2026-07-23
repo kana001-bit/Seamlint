@@ -86,6 +86,7 @@ severity はスタイルではなく安全境界である。
 | `geometry.path_ref_not_found` | error | part 上に指定 `pathRef` が無い |
 | `geometry.missing_check_target` | error | pair が必要な check に `to` が無い |
 | `geometry.invalid_tolerance` | error | `easeRatio` / `gatherRatio` range が不正（`[min,max]`、ease は `0<=min<=max`、gather は `1<=min<=max`） |
+| `geometry.unsupported_request_field` | error | request が旧 snake_case キー（`length_mm` / `start_marker` 等）を使っている。camelCase（`lengthMm` / `startMarker` 等）へ移行する。silent な既定フォールバックを防ぐため明示 error にする |
 | `geometry.cross_source_check_unsupported` | error | `smooth-continuation` を別ソース間で要求した（MVP は同一ソースのみ） |
 | `geometry.unsupported_format` | error | `format` が `svg` / `dxf` 以外 |
 | `geometry.unsupported_check_kind` | error | MVP adapter 未対応の `kind`（`overlap` / `intentional-corner`） |
