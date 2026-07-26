@@ -34,6 +34,35 @@ process.stderr.write(text);
 
 Rule は file path ではなく、points または domain object を受け取ります。CLI は file を読み、それを rule input に変換してよい。
 
+### 神モジュールを育てない（抽出のタイミング）
+
+`src/core/checkGeometryRequest.ts` は一度 1343 行まで膨らみ、後から 122 行の dispatch へ分割し直した
+（測定本体は `geometry-request/kinds/`、解決 / tolerance / エラー / 住所は各モジュールへ）。これは「悪い設計」
+ではなく **決めずに accretion で育てた**結果 — 各 `JoinKind` の測定本体を dispatch のすぐ隣に書き、次の kind も
+前例に倣って同じファイルに足し続けたため。繰り返さないための signal と rule。
+
+抽出のトリガー（この合図が出たら一拍止まる）:
+
+- dispatch（`if` ラダー / `switch`）の枝が数行を超え、**2 つ目の測定本体**が同じファイルに入った。
+- 「ほぼ同じだから」と**ブロックをコピペした**（例: `resolveNeighbourGeometry` が `checkOne` の解決を二重化していた）。
+  重複は責務が括り出されていない最初の可視サイン。
+- dispatch でも測定でもない**別の関心事**を入口に足した（例: Truer 向けアドレッシングを orchestrator に置いた）。
+- ファイル内の移動に **grep が要る** / 1〜2 画面で見渡せない。
+
+rule:
+
+- **「kind を足す = ファイルを足す」。** 入口（`checkOne`）は解決 → dispatch だけの router に保ち、各 kind の測定本体は
+  自分のモジュールにする。ヘルパーは**それが助ける kind の隣**へ（呼び出し元に置かない）。
+- **変更理由を数える。** 「このファイルを触る理由は何種類あるか」= 別々になりたがっている数。1 ファイルが
+  kind 追加 / tolerance 検証 / エラー整形 / 住所付与 / part 解決… の複数理由で変わるなら分割の合図。
+- **"what"（どの kind → どの handler）と "how"（band をどう測るか）を混ぜない。**
+
+但し書き（over-correction もダメ）:
+
+- 境界が見えないうちに割ると間違った線で割る（premature modularization）。目安は **2〜3 個目の kind、または
+  最初のコピペ** — そこが「まだ早い」と「もう手遅れ」の間の適時。**この文書自身**も同じで、Module Boundaries が
+  肥大したら独立 reference へ切り出す（今はここに置く）。
+
 ## Type Hygiene（`any` / `unknown` / `undefined`）
 
 型の緩みは silent なバグの温床。計測値が物理寸法として下流へ流れる以上、ここも急所です。
