@@ -254,9 +254,16 @@ test("extractAstmNotchPoints reads all five ASTM notch layers (4/80/81/82/83), n
 
   const notches = extractAstmNotchPoints(dxf, "A");
   assert.equal(notches.length, 5);
+  // 各レイヤ → notchType の写像も同時に固定（x 昇順で layer 4→80→81→82→83 の順）。
   assert.deepEqual(
-    notches.map((n) => n.x).sort((a, b) => a - b),
-    [10, 20, 30, 40, 50]
+    notches.map((n) => ({ x: n.point.x, notchType: n.notchType })).sort((a, b) => a.x - b.x),
+    [
+      { x: 10, notchType: "v" },
+      { x: 20, notchType: "t" },
+      { x: 30, notchType: "castle" },
+      { x: 40, notchType: "check" },
+      { x: 50, notchType: "u" }
+    ]
   );
 });
 
@@ -281,7 +288,46 @@ test("extractAstmNotchPoints excludes the QA duplicate layers (84-87) and anchor
 
   const notches = extractAstmNotchPoints(dxf, "A");
   assert.equal(notches.length, 1);
-  assert.deepEqual(notches[0], { x: 10, y: 0 });
+  assert.deepEqual(notches[0], { point: { x: 10, y: 0 }, notchType: "v" });
+});
+
+test("threads each notch's notchType through structuralEdges onto its owning edge", () => {
+  // 仕様保護（本ブランチの核）: 抽出した notchType が StructuralNotch までそのまま乗る（下流 Truer が
+  // 弱い tie-breaker に使う）。ここでは下辺の内点に T ノッチ（layer 80）を 1 つ置く。
+  const square: Point[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 }
+  ];
+  const dxf = buildBlockDxfWithLayeredPoints("A", square, [{ layer: "80", x: 30, y: -5 }]);
+
+  const result = structuralEdges(dxf, "A");
+  const withNotch = result.edges.filter((edge) => edge.notches.length > 0);
+  assert.equal(withNotch.length, 1);
+  assert.equal(withNotch[0].notches[0].notchType, "t");
+});
+
+test("gives a corner notch the same notchType on both adjoining edges", () => {
+  // 仕様保護: onCorner の複製は同一 POINT 由来なので、両辺に乗る複製で notchType が一致する（数え直しても
+  // 種別がずれない）。角 (100,0) に U ノッチ（layer 83）を置き、両隣の辺へ複製されることを確認する。
+  const square: Point[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 }
+  ];
+  const dxf = buildBlockDxfWithLayeredPoints("A", square, [{ layer: "83", x: 100, y: 0 }]);
+
+  const result = structuralEdges(dxf, "A");
+  const carriers = result.edges.filter((edge) => edge.notches.length > 0);
+  assert.equal(carriers.length, 2, "corner notch should appear on both edges meeting at the corner");
+  assert.equal(carriers[0].notches[0].notchType, "u");
+  assert.equal(carriers[1].notches[0].notchType, "u");
+  assert.ok(
+    carriers.every((edge) => edge.notches[0].onCorner),
+    "both copies are flagged onCorner"
+  );
 });
 
 const WAIST_DXF = readFileSync(new URL("./fixtures/real-waist-astm.dxf", import.meta.url), "utf8");

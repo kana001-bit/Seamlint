@@ -1,4 +1,5 @@
 import { DxfPathError, extractAstmCutQuantity, extractAstmNotchPoints, extractAstmPolylinePath } from "./dxfPath.ts";
+import type { NotchType } from "./dxfPath.ts";
 import { angleBetweenDegrees, distance, projectPointOntoPolyline, subtract } from "./vector.ts";
 import { DEFAULT_ANGLE_THRESHOLD_DEG } from "../config/defaults.ts";
 import type { Point, SampledPoint } from "../types.ts";
@@ -35,6 +36,7 @@ export interface StructuralDart {
 // ASTM notch（layer 4/80/81/82/83 = V/スリット・T・castle・check・U の 5 種）を、その辺上へ射影した対応点。
 export interface StructuralNotch {
   point: Point; // 元の notch POINT（ASTM 5 レイヤのいずれか）。
+  notchType: NotchType; // ASTM レイヤ由来の種別（v/t/castle/check/u）。下流は弱い tie-breaker に使う（詳細は dxfPath の NotchType）。
   offsetMm: number; // net line からの距離（notch 深さ）。
   edgePosition: number; // その辺の始点からの 0..1 位置。
   loopPosition: number; // ループ全体（最初の角を原点）での 0..1 位置。
@@ -317,8 +319,8 @@ export function structuralEdges(
   // <= の early-return で片側へ決め打ちせず、eps 内で接する辺すべてへ出力する（角は両辺の共有点）。
   const boundaryEps = perimeterMm > 0 ? notchBoundaryEpsilonMm / perimeterMm : 0;
   const notchesByEdge = new Map<number, StructuralNotch[]>();
-  for (const notch of notchPoints) {
-    const projection = projectPointOntoPolyline(closedLoop, notch);
+  for (const astmNotch of notchPoints) {
+    const projection = projectPointOntoPolyline(closedLoop, astmNotch.point);
     if (!projection) {
       continue;
     }
@@ -351,7 +353,16 @@ export function structuralEdges(
     const ambiguous = projection.ambiguous;
     for (const { edgeId, edgePosition } of owners) {
       const list = notchesByEdge.get(edgeId) ?? [];
-      list.push({ point: notch, offsetMm: projection.offsetMm, edgePosition, loopPosition, onCorner, ambiguous });
+      // onCorner で両辺に出す複製にも同じ notchType が乗る（同一 POINT なので種別も同じ）。
+      list.push({
+        point: astmNotch.point,
+        notchType: astmNotch.notchType,
+        offsetMm: projection.offsetMm,
+        edgePosition,
+        loopPosition,
+        onCorner,
+        ambiguous
+      });
       notchesByEdge.set(edgeId, list);
     }
   }
