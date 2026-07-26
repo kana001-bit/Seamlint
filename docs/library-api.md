@@ -183,9 +183,22 @@ interface StructuralEdge {
   darts: StructuralDart[]; // この辺へ畳み込んだ dart（無ければ空）。
   notches: StructuralNotch[]; // この辺へ射影された ASTM notch（layer 4/80/81/82/83 の全種別）。
 }
+
+interface StructuralNotch {
+  point: Point; // notch POINT の座標（素の点。種別は notchType に分離）。
+  notchType: "v" | "t" | "castle" | "check" | "u"; // ASTM レイヤ由来の種別（4→v / 80→t / 81→castle / 82→check / 83→u）。
+  offsetMm: number; // net line からの距離（notch 深さ）。
+  edgePosition: number; // その辺の始点からの 0..1 位置。
+  loopPosition: number; // ループ全体（最初の角を原点）での 0..1 位置。
+  onCorner: boolean; // 構造上の角に乗る場合 true。隣り合う両辺へ同じ notch（同じ notchType）を出す。
+  ambiguous: boolean; // 射影が一意に決まらない場合 true（best 辺に載せつつ信頼できない印）。
+}
 ```
 
 - read-only かつ geometry-only。`arcRange` は測定値ではなく正規化 address なので **丸めない**。
+- `notchType` は **ASTM レイヤ由来のクラス**であって Valentina のパスマーク種別そのものではない: layer 4 は
+  slit と V を束ねて `v` に潰し、DXF 互換モードでは V が `check` に化けうる。したがって下流は**弱い tie-breaker**
+  として使い（一次識別は `edgePosition` 順）、種別が食い違うときは順序へ degrade する想定。
 - `points` は reduced ループ（dart 先端を落とした後）上の頂点列。overlay の主対象である非 dart の seam 辺
   （armhole / outseam / inseam）は正確。darted 辺の points は肩を繋いだ潰れ線になる。
 - 退化した BLOCK（周長 0 の layer 14 POLYLINE 等）は silent に測らず `DxfPathError`

@@ -20,7 +20,7 @@ export type {
 } from "./geometry/sharedEdgeSeam.ts";
 export type { SvgExportInspectionReport, SvgExportPathInfo, SvgMarkerCandidate } from "./core/inspectSvgExport.ts";
 export type { AstmPassmarkProjectionOptions, AstmPassmarkProjectionResult } from "./geometry/astmMarker.ts";
-export type { AstmAnchorPoint } from "./geometry/dxfPath.ts";
+export type { AstmAnchorPoint, NotchType } from "./geometry/dxfPath.ts";
 export type {
   InteriorEdgeLocation,
   StructuralDart,

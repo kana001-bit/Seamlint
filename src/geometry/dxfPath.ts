@@ -287,17 +287,35 @@ export function extractAstmAnchorPoints(dxfText: string, blockName: string): Ast
   return anchors;
 }
 
-// ASTM DXF は notch（合印）を「形状ごとに別レイヤ」へ書く。V/スリット=4, T=80, castle=81, check=82,
-// U=83 の 5 枚に分散するので、この集合に載る layer をまとめて notch として拾う（layer 4 だけ読むと
-// T/castle/check/U を silent に取りこぼす）。どのレイヤも DXF 上はただの POINT（8/10/20 のみ参照）で
-// 書式は同一なので、フィルタを広げるだけで 5 種すべて拾える。
-// 84–87 は notch ではなく品質検証用の複製曲線（境界/内部線/内部くり抜き/縫い線）なので絶対に含めない。
-const ASTM_NOTCH_LAYERS = new Set(["4", "80", "81", "82", "83"]);
+// notch の種別（Seamlint が下流へ出す enum）。これは「ASTM レイヤ由来のクラス」であって、Valentina の
+// パスマーク種別そのものではない: layer 4 は slit(one/two/three) と V を束ねて "v" に潰し、DXF 互換モードでは
+// V が layer 82(check) へ飛ぶことがある。したがって下流は一次識別を辺内の順序で行い、種別は弱い
+// tie-breaker としてだけ使う（種別が食い違うときは順序へ倒す）。意味論は docs/library-api.md の StructuralNotch 節。
+export type NotchType = "v" | "t" | "castle" | "check" | "u";
 
-// 上記 5 レイヤの notch POINT を集める。anchor(2/3) とは別に、seam 上の対応確認に使う。
+// notch POINT（座標）とその種別。座標は素の Point のまま、種別は別フィールドで持つ。
+export interface AstmNotch {
+  point: Point;
+  notchType: NotchType;
+}
+
+// ASTM DXF は notch（合印）を「形状ごとに別レイヤ」へ書く。V/スリット=4, T=80, castle=81, check=82, U=83 の
+// 5 枚に分散するので、この写像に載る layer をまとめて notch として拾う（layer 4 だけ読むと T/castle/check/U を
+// silent に取りこぼす）。どのレイヤも DXF 上はただの POINT（8/10/20 のみ参照）で書式は同一。写像に無いレイヤ
+// （84–87 の品質検証用複製曲線・2/3 の anchor/turn 等）は notch ではないので拾わない。この写像 1 つが
+// 「どのレイヤが notch か」のフィルタと「種別は何か」の両方の単一ソース。
+const ASTM_NOTCH_LAYER_TO_TYPE = new Map<string, NotchType>([
+  ["4", "v"],
+  ["80", "t"],
+  ["81", "castle"],
+  ["82", "check"],
+  ["83", "u"]
+]);
+
+// 上記 5 レイヤの notch POINT を、座標＋種別（notchType）で集める。anchor(2/3) とは別に、seam 上の対応確認に使う。
 // notch が無いのは正常（空配列）だが、block 自体が無いのは path_not_found として区別する
 // （extractAstmPolylinePath / extractAstmAnchorPoints と挙動を揃え、silent failure を避ける）。
-export function extractAstmNotchPoints(dxfText: string, blockName: string): Point[] {
+export function extractAstmNotchPoints(dxfText: string, blockName: string): AstmNotch[] {
   const groups = readGroups(dxfText);
   const targetBlock = blockName.trim().toUpperCase();
 
@@ -306,26 +324,25 @@ export function extractAstmNotchPoints(dxfText: string, blockName: string): Poin
   let currentBlock: string | null = null;
   let foundTargetBlock = false;
   let pointEntity: PointEntityState | null = null;
-  const notches: Point[] = [];
+  const notches: AstmNotch[] = [];
 
   const finishPointEntity = () => {
     if (!pointEntity) {
       return;
     }
 
-    if (
-      section === "BLOCKS" &&
-      currentBlock === targetBlock &&
-      pointEntity.layer !== null &&
-      ASTM_NOTCH_LAYERS.has(pointEntity.layer)
-    ) {
+    // layer から種別へ写す。写像に無いレイヤ（notch でない POINT）は undefined＝この POINT を無視する。
+    // 写像 1 つがフィルタ兼種別ソース。
+    const notchType = pointEntity.layer !== null ? ASTM_NOTCH_LAYER_TO_TYPE.get(pointEntity.layer) : undefined;
+
+    if (section === "BLOCKS" && currentBlock === targetBlock && notchType !== undefined) {
       if (!Number.isFinite(pointEntity.x) || !Number.isFinite(pointEntity.y)) {
         throw new DxfPathError("geometry.invalid_dxf_path", "DXF POINT is missing x/y coordinates.", {
           actual: { blockName, layer: pointEntity.layer }
         });
       }
 
-      notches.push({ x: pointEntity.x as number, y: pointEntity.y as number });
+      notches.push({ point: { x: pointEntity.x as number, y: pointEntity.y as number }, notchType });
     }
 
     pointEntity = null;

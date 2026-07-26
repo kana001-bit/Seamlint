@@ -24,7 +24,8 @@ function edge(edgeId: number, finishedLengthMm: number, notchFractions: readonly
 }
 
 function notchAt(edgePosition: number): StructuralNotch {
-  return { point: { x: 0, y: 0 }, offsetMm: 20, edgePosition, loopPosition: edgePosition, onCorner: false, ambiguous: false };
+  // notchType は matchSharedEdge が読まない（署名は edgePosition のみ）のでダミー値でよい。
+  return { point: { x: 0, y: 0 }, notchType: "v", offsetMm: 20, edgePosition, loopPosition: edgePosition, onCorner: false, ambiguous: false };
 }
 
 // 最小 ASTM DXF（layer 14 の閉 POLYLINE）を1 BLOCK 分だけ組む。structural-edges.test.ts と同じ形。
