@@ -259,11 +259,33 @@ test("seam-edge resolves the real front<->back to the outseam once the connector
   assert.ok(matched, "should resolve and emit seam_edge_matched");
   // matched した辺は outseam（finished ~815mm・notch 4個）で、外周でも inseam(552) でも waist(165) でもない。
   type EdgeAddr = { blockName: string; edgeId: number; arcRange: [number, number] };
+  type SeamNotch = { edgePosition: number; notchType: string; onCorner: boolean; ambiguous: boolean };
   const actual = matched?.actual as
-    | { fromFinishedMm: number; fromNotchFractions: number[]; fromEdge?: EdgeAddr; toEdge?: EdgeAddr }
+    | {
+        fromFinishedMm: number;
+        fromNotchFractions: number[];
+        fromNotches: SeamNotch[];
+        fromEdge?: EdgeAddr;
+        toEdge?: EdgeAddr;
+      }
     | undefined;
   assert.ok((actual?.fromFinishedMm ?? 0) > 780 && (actual?.fromFinishedMm ?? 0) < 840, `outseam length ${actual?.fromFinishedMm}`);
   assert.equal(actual?.fromNotchFractions.length, 4);
+  // fromNotches は種別つきの上位互換（下流 Truer の matcher 向け）。outseam の実 notch は V2+T2＝種別 v/t が両方出る。
+  // edgePosition は fromNotchFractions と同じ位置を保つ（順序が主・種別は弱い tie-breaker）。
+  assert.equal(actual?.fromNotches.length, 4);
+  assert.deepEqual(
+    actual?.fromNotches.map((notch) => notch.edgePosition),
+    actual?.fromNotchFractions
+  );
+  const notchTypes = (actual?.fromNotches ?? []).map((notch) => notch.notchType).sort();
+  assert.deepEqual(notchTypes, ["t", "t", "v", "v"], `outseam notch types ${notchTypes}`);
+  assert.ok(
+    (actual?.fromNotches ?? []).every(
+      (notch) => typeof notch.onCorner === "boolean" && typeof notch.ambiguous === "boolean"
+    ),
+    "each surfaced notch carries onCorner/ambiguous flags"
+  );
   // seam_edge_matched も機械可読な辺住所を持つ（seam_length_mismatch と同形・Truer bridge）。outseam は両側 edgeId 1。
   assert.equal(actual?.fromEdge?.blockName, "FRONT");
   assert.equal(actual?.fromEdge?.edgeId, 1);

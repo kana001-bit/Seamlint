@@ -110,7 +110,7 @@ severity はスタイルではなく安全境界である。
 
 | code | severity | 意味 |
 |---|---|---|
-| `geometry.seam_edge_matched` | info | 共有辺を発見して測った（外周ではなく実辺。辺 id・両側 finished 長・notch fraction を `actual` に） |
+| `geometry.seam_edge_matched` | info | 共有辺を発見して測った（外周ではなく実辺。辺 id・両側 finished 長・notch（位置＋種別）を `actual` に） |
 | `geometry.seam_edge_requires_dxf` | error | seam-edge の両側が DXF でない（SVG は辺分割不可） |
 | `geometry.seam_edge_no_major_edges` | error | 片側に比較できる辺が1本も無い（退化） |
 | `geometry.seam_edge_no_match` | error | finished 長が許容内で一致する共有辺が無い（この2パーツはここで縫わない可能性） |
@@ -174,6 +174,33 @@ additive に載せる。これは Seamlint 自身の辺住所で、`slnt edges` 
 - 既存の flat な id（`fromEdgeId` / `toEdgeId` / `bandEdgeId`）は **後方互換のため据え置き**（アドレスは additive）。
 - **辺分割を通る経路だけ**が載せる。whole-path の `sewn-seam`（構造辺を持たない）は **載せない**
   （false なアドレスを作らない）。`edgeId` が解決できない辺は当該側を省く（捏造しない）。
+
+### seam_edge_matched の notch surface（applicable 用）
+
+`geometry.seam_edge_matched` は測定した共有辺上の notch を2形で `actual` に載せる（additive・後方互換）。下流 = Truer の
+applicable matcher が、測定辺 notch と Loomit の `.val` notch を **順序（`edgePosition`）を主・種別（`notchType`）を
+弱い tie-breaker** に突き合わせ、一致 notch から `.val` の錨 spline → 長さ候補へ辿るための入口:
+
+- `fromNotchFractions` / `toNotchFractions`: notch 位置のみ（`number[]`・`edgePosition` 0..1）。**既存契約・据え置き**。
+- `fromNotches` / `toNotches`: 位置＋種別つきの機械可読 notch（`fromNotchFractions` の上位互換）。各要素:
+  - `edgePosition`: 辺始点からの 0..1 位置（**マッチの主キー**。両方向試すのは Truer 側）。
+  - `notchType`: ASTM レイヤ由来の種別 `"v" | "t" | "castle" | "check" | "u"`（**弱い tie-breaker**。layer 4 が V と
+    スリットを束ね、互換モードで V→check へ飛ぶこともあるので真の Valentina マークと食い違いうる。順序を種別で上書きしない）。
+  - `onCorner`: 辺の端点上の notch（両隣の辺にも複製されるので matcher は dedupe する）。
+  - `ambiguous`: どの辺に属すか一意に決められなかった notch（matcher は除去する）。
+
+```jsonc
+// seam_edge_matched（既存 fromNotchFractions は保持・fromNotches が種別つき上位互換）
+"actual": {
+  "fromFinishedMm": 814.568, "toFinishedMm": 806.722, "diffMm": 7.847,
+  "fromEdge": { "blockName": "FRONT", "edgeId": 1, "arcRange": [0.099, 0.499] },
+  "fromNotchFractions": [0.061, 0.246, 0.503, 0.688],
+  "fromNotches": [
+    { "edgePosition": 0.061, "notchType": "v", "onCorner": false, "ambiguous": false },
+    { "edgePosition": 0.246, "notchType": "t", "onCorner": false, "ambiguous": false }
+  ]
+}
+```
 
 ## Input / CLI Diagnostics
 

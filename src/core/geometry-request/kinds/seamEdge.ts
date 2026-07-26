@@ -2,7 +2,11 @@
 // structuralEdges で辺分割し、finished 長が一意に一致する major 辺ペア＝共有辺を選ぶ。BLOCK 外周を丸ごと
 // 比べる sewn-seam の「ceiling」を、実際に縫い合う辺の比較へ引き下げる。DXF 専用（SVG は辺分割不可）。
 import { structuralEdges } from "../../../geometry/structuralEdges.ts";
-import type { StructuralEdge, StructuralEdgesResult } from "../../../geometry/structuralEdges.ts";
+import type {
+  StructuralEdge,
+  StructuralEdgesResult,
+  StructuralNotch
+} from "../../../geometry/structuralEdges.ts";
 import { round } from "../../../geometry/vector.ts";
 import { matchSharedEdge } from "../../../geometry/sharedEdgeSeam.ts";
 import type { SharedEdgeCandidate, SharedEdgeMatchResult } from "../../../geometry/sharedEdgeSeam.ts";
@@ -151,8 +155,13 @@ function sharedEdgeFailureDetail(reason: Extract<SharedEdgeMatchResult, { ok: fa
   }
 }
 
-// 共有辺が定まったことを示す info 診断。matched 辺 id・両側 finished 長・相対差に加え、辺上の notch fraction
-// （あれば対応の裏づけ）を actual に載せる。info なので status は上げない（statusForDiagnostics で素通し）。
+// 共有辺が定まったことを示す info 診断。matched 辺 id・両側 finished 長・相対差に加え、辺上の notch を actual に載せる。
+// notch は2形を出す（additive・後方互換）:
+//   fromNotchFractions/toNotchFractions … 位置のみ（number[]）。既存契約なので据え置き。
+//   fromNotches/toNotches … 位置＋種別＋onCorner/ambiguous の機械可読 notch（下流 = Truer の matcher 向け）。
+//     applicable の matcher は「順序（edgePosition）が主・種別（notchType）は弱い tie-breaker」で測定辺 notch と .val
+//     notch を突き合わせ、onCorner の重複を dedupe・ambiguous を除去する。その全部をここで渡す。
+// info なので status は上げない（statusForDiagnostics で素通し）。
 function sharedEdgeMatchedDiagnostic(
   pairTarget: string,
   candidate: SharedEdgeCandidate,
@@ -170,13 +179,33 @@ function sharedEdgeMatchedDiagnostic(
       fromEdge: edgeAddress(fromResult, candidate.fromEdgeId),
       toEdge: edgeAddress(toResult, candidate.toEdgeId),
       fromNotchFractions: notchFractions(fromResult.edges[candidate.fromEdgeId]),
-      toNotchFractions: notchFractions(toResult.edges[candidate.toEdgeId])
+      toNotchFractions: notchFractions(toResult.edges[candidate.toEdgeId]),
+      fromNotches: notchDetails(fromResult.edges[candidate.fromEdgeId]),
+      toNotches: notchDetails(toResult.edges[candidate.toEdgeId])
     }
   };
 }
 
+// 位置のみの notch 列（既存契約・後方互換）。
 function notchFractions(edge: StructuralEdge | undefined): number[] {
   return edge ? edge.notches.map((notch) => round(notch.edgePosition)) : [];
+}
+
+// 種別つきの機械可読 notch。edgePosition 順のまま（構造上その辺の走査順）、notchType（弱い tie-breaker）と
+// onCorner/ambiguous（matcher の dedupe/除去用）を載せる。fromNotchFractions の上位互換。
+type SeamEdgeNotch = Pick<StructuralNotch, "notchType" | "onCorner" | "ambiguous"> & {
+  edgePosition: number;
+};
+
+function notchDetails(edge: StructuralEdge | undefined): SeamEdgeNotch[] {
+  return edge
+    ? edge.notches.map((notch) => ({
+        edgePosition: round(notch.edgePosition),
+        notchType: notch.notchType,
+        onCorner: notch.onCorner,
+        ambiguous: notch.ambiguous
+      }))
+    : [];
 }
 
 function roundCandidate(candidate: SharedEdgeCandidate): SharedEdgeCandidate {
