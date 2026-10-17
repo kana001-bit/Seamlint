@@ -1,5 +1,6 @@
 # Seamlint
 
+[![npm](https://img.shields.io/npm/v/seamlint)](https://www.npmjs.com/package/seamlint)
 [![CI](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml/badge.svg)](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml)
 
 A read-only geometry linter for sewing pattern pieces.
@@ -25,8 +26,16 @@ and a narrow, well-defined boundary with [Loomit](https://github.com/kana001-bit
 Requirements: Node.js 24+.
 
 ```sh
-npm run check:sample        # curve kink on the sample SVG (text)
-npm run check:sample-json   # same, as JSON
+npm install -g seamlint
+slnt --help
+```
+
+The sample SVGs live in this repository, so clone it to try them:
+
+```sh
+git clone https://github.com/kana001-bit/Seamlint.git
+cd Seamlint
+slnt check ./examples/armhole-kink.svg --path body-armhole
 ```
 
 ```text
@@ -40,6 +49,20 @@ Length: 249.609 mm
   actual: {"angleDeg":45.809,"point":{"x":120,"y":72}}
   expected: {"maxAngleDeg":25}
   suggestion: Check whether this is an intentional corner or an unwanted kink.
+
+[warning] geometry.curve_kink
+  Path direction changes sharply near sampled point 39.
+  target: body-armhole
+  actual: {"angleDeg":69.983,"point":{"x":124,"y":130}}
+  expected: {"maxAngleDeg":25}
+  suggestion: Check whether this is an intentional corner or an unwanted kink.
+```
+
+Without installing, the same check runs from source inside the clone:
+
+```sh
+npm run check:sample        # curve kink on the sample SVG (text)
+npm run check:sample-json   # same, as JSON
 ```
 
 ## CLI
@@ -53,7 +76,7 @@ slnt inspect <svg> [--json]
 slnt check-request [request.json] [--json]
 ```
 
-During the MVP (the package is not published yet) run it directly:
+From a clone, without installing, run it from source instead:
 
 ```sh
 node ./src/cli/slnt.ts <command> ...
@@ -67,15 +90,15 @@ sharp direction changes (`geometry.curve_kink`).
 
 ```sh
 # Compare two seams with a strict length tolerance
-node ./src/cli/slnt.ts check ./examples/armhole-kink.svg \
+slnt check ./examples/armhole-kink.svg \
   --path body-armhole --compare-to sleeve-cap --length-tolerance-mm 0.5
 
 # Check two endpoints join smoothly
-node ./src/cli/slnt.ts check ./examples/smooth-join.svg \
+slnt check ./examples/smooth-join.svg \
   --path front-yoke --compare-to front-panel --expect-smooth
 
 # Check a path expected to close is actually closed
-node ./src/cli/slnt.ts check ./examples/open-loop.svg --path neckline-loop --closed
+slnt check ./examples/open-loop.svg --path neckline-loop --closed
 ```
 
 | option | default | meaning |
@@ -99,7 +122,7 @@ Inspects an exported SVG **before** trusting it for measurement — `viewBox` vs
 path ids (and duplicates), path/ancestor `transform`s, and marker-like elements.
 
 ```sh
-node ./src/cli/slnt.ts inspect ./path/to/exported.svg --json
+slnt inspect ./path/to/exported.svg --json
 ```
 
 ### `slnt check-request`
@@ -226,8 +249,8 @@ recorded in the project's design history.
 
 ## Status
 
-Early prototype — a **public alpha in preparation**, not a published package yet (`package.json`
-is still `private` at `0.0.0`).
+Early prototype — a **public alpha**, published on npm as
+[`seamlint`](https://www.npmjs.com/package/seamlint) (v0.1.0).
 
 **Measures today** — curve kinks, seam-length match, endpoint gap + tangent, open loops, and
 ease / gather ratios, over SVG or ASTM DXF. On DXF it splits a piece's net line into structural
@@ -237,5 +260,4 @@ disambiguating with a notch-count signature. It already runs end-to-end from Loo
 
 **Deliberately out of scope** — Seamlint never edits, never auto-fixes, and never infers
 correspondence points; it refuses (with an `error`) to measure geometry whose assumptions are
-broken rather than returning a confident wrong number. Reading `.val` directly, an npm install
-path, and auto-normalizing exported SVG are not there yet.
+broken rather than returning a confident wrong number. Reading `.val` directly and auto-normalizing exported SVG are not there yet.

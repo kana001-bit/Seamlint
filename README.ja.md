@@ -1,5 +1,6 @@
 # Seamlint
 
+[![npm](https://img.shields.io/npm/v/seamlint)](https://www.npmjs.com/package/seamlint)
 [![CI](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml/badge.svg)](https://github.com/kana001-bit/Seamlint/actions/workflows/ci.yml)
 
 縫製パターンのための、read-only な幾何 linter。
@@ -25,8 +26,16 @@ Seamlint は **計測ツールであって CAD エンジンではない**。型�
 必要なもの: Node.js 24+。
 
 ```sh
-npm run check:sample        # sample SVG の curve kink（text）
-npm run check:sample-json   # 同上（JSON）
+npm install -g seamlint
+slnt --help
+```
+
+サンプルの SVG はこのリポジトリの中にあるので、試すには clone する:
+
+```sh
+git clone https://github.com/kana001-bit/Seamlint.git
+cd Seamlint
+slnt check ./examples/armhole-kink.svg --path body-armhole
 ```
 
 ```text
@@ -40,6 +49,20 @@ Length: 249.609 mm
   actual: {"angleDeg":45.809,"point":{"x":120,"y":72}}
   expected: {"maxAngleDeg":25}
   suggestion: Check whether this is an intentional corner or an unwanted kink.
+
+[warning] geometry.curve_kink
+  Path direction changes sharply near sampled point 39.
+  target: body-armhole
+  actual: {"angleDeg":69.983,"point":{"x":124,"y":130}}
+  expected: {"maxAngleDeg":25}
+  suggestion: Check whether this is an intentional corner or an unwanted kink.
+```
+
+インストールせずに、clone の中でソースから同じ check を走らせることもできる:
+
+```sh
+npm run check:sample        # sample SVG の curve kink（text）
+npm run check:sample-json   # 同上（JSON）
 ```
 
 ## CLI
@@ -53,7 +76,7 @@ slnt inspect <svg> [--json]
 slnt check-request [request.json] [--json]
 ```
 
-MVP のあいだ（package は未公開）は直接実行する:
+インストールせずに clone から使う場合は、ソースを直接実行する:
 
 ```sh
 node ./src/cli/slnt.ts <command> ...
@@ -67,15 +90,15 @@ SVG の 1 本の path を測る。`--compare-to` を付けると 2 本を比較�
 
 ```sh
 # 2 本の seam を厳しめの許容差で比較する
-node ./src/cli/slnt.ts check ./examples/armhole-kink.svg \
+slnt check ./examples/armhole-kink.svg \
   --path body-armhole --compare-to sleeve-cap --length-tolerance-mm 0.5
 
 # 2 つの端点が滑らかに続くかを見る
-node ./src/cli/slnt.ts check ./examples/smooth-join.svg \
+slnt check ./examples/smooth-join.svg \
   --path front-yoke --compare-to front-panel --expect-smooth
 
 # 閉じるはずの path が開いていないかを見る
-node ./src/cli/slnt.ts check ./examples/open-loop.svg --path neckline-loop --closed
+slnt check ./examples/open-loop.svg --path neckline-loop --closed
 ```
 
 | option | 既定 | 意味 |
@@ -98,7 +121,7 @@ exit code: status が `error` → `1`、`ok`/`warning` → `0`。`warning` だ�
 path id の有無・重複、path/祖先の `transform`、marker らしき要素を確認する。
 
 ```sh
-node ./src/cli/slnt.ts inspect ./path/to/exported.svg --json
+slnt inspect ./path/to/exported.svg --json
 ```
 
 ### `slnt check-request`
@@ -216,8 +239,8 @@ Seamlint は AI コーディングエージェントで作っているが、方�
 
 ## Status
 
-初期プロトタイプ——**public alpha を準備中**で、まだ公開 package ではない（`package.json` は
-`private` のまま `0.0.0`）。
+初期プロトタイプ——**public alpha** として npm に
+[`seamlint`](https://www.npmjs.com/package/seamlint)（v0.1.0）を公開済み。
 
 **いま測れること** — curve kink、seam length の一致、端点 gap + 接線、open loop、ease / gather
 比を、SVG または ASTM DXF 上で。DXF ではピースの net line を structural edge（ダーツ・ノッチ・
@@ -225,5 +248,5 @@ band）に分割し、宣言された 2 part 間の *共有 seam 辺* を、notc
 Loomit から `GeometryCheckRequest` の subprocess 契約経由で end-to-end に動く。
 
 **意図的に範囲外** — Seamlint は編集も自動修正もせず、対応点を推定もしない。幾何の前提が崩れて
-いれば、自信ありげな誤った数値を返すより `error` で測定を拒む。`.val` の直接読み込み、npm install
-導線、書き出し SVG の自動 normalization はまだ無い。
+いれば、自信ありげな誤った数値を返すより `error` で測定を拒む。`.val` の直接読み込みと、書き出し
+SVG の自動 normalization はまだ無い。
