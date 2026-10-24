@@ -51,3 +51,16 @@ jobs:
       # `npm test` は pretest で typecheck+build を再実行するため、ここでは test runner を直接叩く。
       - name: Test
         run: node --test
+
+      # 利用者が受け取るのはリポジトリではなく npm の tarball。npm pack で作った tarball を
+      # リポジトリ外の空ディレクトリに入れ、入れた slnt で sample を測れるかを見る
+      # （files の漏れ・bin/shebang の壊れ・dist 不在は、上の test では見つからない）。
+      - name: Packed install smoke test
+        shell: bash
+        run: |
+          tarball="$(npm pack --silent --pack-destination "$RUNNER_TEMP" | tail -n 1)"
+          mkdir "$RUNNER_TEMP/smoke"
+          cd "$RUNNER_TEMP/smoke"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP/$tarball"
+          npx --no-install slnt check "$GITHUB_WORKSPACE/examples/armhole-kink.svg" --path body-armhole
